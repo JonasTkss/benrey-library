@@ -81,6 +81,15 @@ def test_unusable_reply_moves_to_next_model(openrouter, bad):
     assert client.complete(MESSAGES).model == "test/model-b:free"
 
 
+def test_cut_off_reply_moves_to_next_model(openrouter):
+    cut = httpx.Response(
+        200,
+        json={"choices": [{"message": {"content": '{"answer": "You'}, "finish_reason": "length"}]},
+    )
+    openrouter.responses = [cut, reply("from b")]
+    assert client.complete(MESSAGES).content == "from b"
+
+
 def test_all_models_failing_raises(openrouter):
     openrouter.responses = [httpx.ConnectError("down"), httpx.ReadTimeout("slow")]
     with pytest.raises(client.AssistantUnavailable):
@@ -106,5 +115,5 @@ def test_request_shape(openrouter):
     client.complete(MESSAGES)
     sent = openrouter.requests[0]
     assert sent["temperature"] == 0.2
-    assert sent["max_tokens"] == 300
+    assert sent["max_tokens"] == client.MAX_TOKENS
     assert sent["messages"] == MESSAGES

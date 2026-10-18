@@ -24,6 +24,10 @@ READ_TIMEOUT = 12.0
 TOTAL_BUDGET = 20.0  # seconds across all models and retries
 RETRY_BACKOFF = 0.5
 MAX_ANSWER_CHARS = 1200
+# Reasoning models spend part of this on hidden thinking before the answer, so
+# it is well above what an 80-word answer needs. Free models cost nothing per
+# token; the cap only bounds latency.
+MAX_TOKENS = 800
 
 
 class AssistantUnavailable(Exception):
@@ -75,7 +79,7 @@ def _call(http, model, messages, headers, remaining) -> ModelReply | str:
     """One request. Returns a reply, "retry" or "skip". Never raises for
     provider problems; those are logged and turned into a fallback step."""
     timeout = httpx.Timeout(min(READ_TIMEOUT, remaining), connect=CONNECT_TIMEOUT)
-    payload = {"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 300}
+    payload = {"model": model, "messages": messages, "temperature": 0.2, "max_tokens": MAX_TOKENS}
     started = time.monotonic()
     try:
         response = http.post(API_URL, json=payload, headers=headers, timeout=timeout)
@@ -94,9 +98,14 @@ def _call(http, model, messages, headers, remaining) -> ModelReply | str:
         _log(model, started, f"{status // 100}xx ({status})")
         return "skip"
     try:
-        content = response.json()["choices"][0]["message"]["content"] or ""
+        choice = response.json()["choices"][0]
+        content = choice["message"]["content"] or ""
     except (ValueError, KeyError, IndexError, TypeError):
         _log(model, started, "malformed body")
+        return "skip"
+    if choice.get("finish_reason") == "length":
+        # Ran out of tokens mid-answer: a half sentence is worse than the next model.
+        _log(model, started, "cut off (length)")
         return "skip"
     if not content.strip():
         _log(model, started, "empty reply")

@@ -144,7 +144,7 @@ what the alternative was, what breaks at scale.
   models go in too.
 - **The exact prompt:** `SYSTEM_PROMPT` in `assistant/views.py`, plus the generated context.
   The user's text goes only into the `user` message, never into the system prompt
-  (`test_prompt_injection_stays_in_the_user_message`). Temperature 0.2, max 300 tokens.
+  (`test_prompt_injection_stays_in_the_user_message`). Temperature 0.2, max 800 tokens (reasoning models spend part of it thinking; a reply cut off with `finish_reason: length` counts as a failure and the next model is tried).
 - **What I left out of the context:** row data (member names, emails, loans). The assistant
   explains forms; it does not need personal data, and sending it to a third-party free model
   would be a privacy problem.
