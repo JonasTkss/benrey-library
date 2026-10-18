@@ -23,6 +23,8 @@
   <link rel="stylesheet" href="{% static 'assistant/chat.css' %}">
   <meta name="assistant-config"
         data-endpoint="{% url 'assistant:ask' %}"
+        data-history="{% url 'assistant:history' %}"
+        data-clear="{% url 'assistant:clear_history' %}"
         data-csrf="{{ csrf_token }}"
         data-admin-root="{% url 'admin:index' %}">
   <script src="{% static 'assistant/chat.js' %}" defer></script>

@@ -25,7 +25,7 @@ import unicodedata
 from django.conf import settings
 from django.core.cache import cache
 from django.http import JsonResponse
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
 from . import client, context, lookups
 
@@ -60,10 +60,20 @@ def error(message: str, status: int) -> JsonResponse:
     return JsonResponse({"error": message}, status=status)
 
 
+HISTORY_KEY = "assistant_history"
+HISTORY_LIMIT = 30  # messages kept per login session (questions + answers)
+CLIENT_ID = re.compile(r"^[A-Za-z0-9-]{1,40}$")
+
+
+def is_staff(request) -> bool:
+    user = request.user
+    return user.is_authenticated and user.is_active and user.is_staff
+
+
 @require_POST
 def ask(request):
     # JSON endpoint: answer 403 instead of redirecting to the login page.
-    if not (request.user.is_authenticated and request.user.is_active and request.user.is_staff):
+    if not is_staff(request):
         return error("Staff login required.", 403)
 
     try:
@@ -81,36 +91,70 @@ def ask(request):
     field_name = body.get("field") if isinstance(body.get("field"), str) else None
     if not model_id or f"{model_id}.{field_name}" not in context.known_field_ids():
         field_name = None
+    # Lets the widget find this answer in the history if the page was left mid-question.
+    client_id = body.get("client_id")
+    client_id = client_id if isinstance(client_id, str) and CLIENT_ID.match(client_id) else None
 
     limited = rate_limited(request.user.pk)
     if limited:
         return error(limited, 429)
 
-    if not client.is_configured():
-        fallback = fallback_answer(question, model_id, field_name, request.user)
-        return JsonResponse(fallback | {"disabled": True})
+    payload = answer_question(request.user, question, model_id, field_name)
+    remember(request, question, payload, client_id)
+    return JsonResponse(payload)
 
-    messages = build_messages(question, model_id, field_name, request.user)
+
+def answer_question(user, question, model_id, field_name) -> dict:
+    if not client.is_configured():
+        return fallback_answer(question, model_id, field_name, user) | {"disabled": True}
+
+    messages = build_messages(question, model_id, field_name, user)
     try:
         reply = client.complete(messages)
     except client.AssistantUnavailable:
-        return JsonResponse(fallback_answer(question, model_id, field_name, request.user))
+        return fallback_answer(question, model_id, field_name, user)
 
     requested = client.parse_lookup(reply.content)
     if requested:
-        return JsonResponse(lookup_answer(request.user, *requested))
+        return lookup_answer(user, *requested)
 
     answer, source_ids = client.parse_reply(reply.content, context.known_field_ids())
     if not answer:
-        return JsonResponse(fallback_answer(question, model_id, field_name, request.user))
-    return JsonResponse(
-        {
-            "answer": answer,
-            "sources": [source_payload(s) for s in source_ids],
-            "grounded": bool(source_ids),
-            "degraded": False,
-        }
-    )
+        return fallback_answer(question, model_id, field_name, user)
+    return {
+        "answer": answer,
+        "sources": [source_payload(s) for s in source_ids],
+        "grounded": bool(source_ids),
+        "degraded": False,
+    }
+
+
+def remember(request, question: str, payload: dict, client_id: str | None) -> None:
+    """Keep the conversation in the login session (server side, DB-backed).
+
+    It survives page changes, and an answer that finishes after the user has
+    already navigated away is still saved for the next page. It is deleted
+    at logout and expires with the session (8 hours), and no other user or
+    session can read it."""
+    history = request.session.get(HISTORY_KEY, [])
+    history.append({"role": "user", "text": question, "client_id": client_id})
+    history.append({"role": "bot", "client_id": client_id, **payload})
+    request.session[HISTORY_KEY] = history[-HISTORY_LIMIT:]
+
+
+@require_GET
+def history(request):
+    if not is_staff(request):
+        return error("Staff login required.", 403)
+    return JsonResponse({"messages": request.session.get(HISTORY_KEY, [])})
+
+
+@require_POST
+def clear_history(request):
+    if not is_staff(request):
+        return error("Staff login required.", 403)
+    request.session.pop(HISTORY_KEY, None)
+    return JsonResponse({"messages": []})
 
 
 def build_messages(question: str, model_id: str | None, field_name: str | None, user) -> list[dict]:

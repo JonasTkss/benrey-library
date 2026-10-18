@@ -34,6 +34,17 @@ def overdue_badge(request):
 
 
 def sidebar_navigation(request):
+    """Menu for this user: items they lack permission for are removed here,
+    and so is any group left empty (Unfold would still draw its heading)."""
+    groups = []
+    for group in _all_navigation():
+        items = [item for item in group["items"] if item.get("permission", lambda r: True)(request)]
+        if items:
+            groups.append({**group, "items": items})
+    return groups
+
+
+def _all_navigation():
     url = reverse_lazy
     return [
         {

@@ -140,6 +140,10 @@ The **Ask AI** button answers two kinds of question.
   to the model**, numbers cannot be invented, and nobody can see more than their role allows.
   The prompt only lists lookups the user's role may run. If the AI is down, keyword routing
   handles the common questions.
+- **Conversation:** kept in the server-side login session (last 30 messages), so it survives
+  page changes. A question asked just before leaving a page is still answered: the server
+  finishes it and saves it, and the next page picks it up. Deleted at logout or after 8 hours;
+  a **Clear** button wipes it sooner.
 - **Field questions, grounding:** each request builds context from the live model definitions: field id
   (`loan.due_date`), label, type, required, choices, default, `help_text`. The context also
   includes the business rules, generated from the same constants the code enforces. The form
@@ -219,7 +223,8 @@ to stdout). `/healthz` tells you whether the app can reach the database (503 if 
 - **2FA**: would be my next security step (django-otp for staff).
 - **Background jobs (Celery, cron)**: nothing needs one yet. "Overdue" is computed at query
   time rather than set by a nightly job.
-- **Chat history**: the assistant stores nothing; less data to protect.
+- **Long-term chat history**: the conversation is kept only in the login session (see the
+  AI section) and is deleted at logout. Nothing is kept across logins; less data to protect.
 - **Full-text search engine, i18n**: admin `icontains` search is fine at this size.
 
 ## What I would do differently with more time

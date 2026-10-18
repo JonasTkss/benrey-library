@@ -48,6 +48,12 @@ def test_sidebar_hides_administration_from_librarians(librarian_client, admin_cl
             if item["has_permission"]
         }
 
+    titles = [
+        g["title"]
+        for g in librarian_client.get(reverse("admin:index")).context["sidebar_navigation"]
+    ]
+    assert "Administration" not in titles  # no empty heading either
+
     staff_url = reverse("admin:auth_user_changelist")
     assert staff_url not in sidebar_links(librarian_client)
     assert staff_url in sidebar_links(admin_client)

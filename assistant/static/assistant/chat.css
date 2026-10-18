@@ -113,3 +113,27 @@ html.dark .assistant-chip { background: var(--color-primary-900); color: var(--c
 a.assistant-result-label:hover { text-decoration: underline; }
 html.dark .assistant-result-label { color: var(--color-primary-300); }
 .assistant-result-detail { font-size: 11px; color: var(--lib-muted); }
+
+.assistant-header-actions { display: flex; align-items: center; gap: 6px; }
+.assistant-clear {
+  background: rgba(255, 255, 255, 0.15);
+  border: 0;
+  border-radius: 6px;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.assistant-clear:hover { background: rgba(255, 255, 255, 0.28); }
+.assistant-retry {
+  margin-top: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--color-primary-600);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-primary-700);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
