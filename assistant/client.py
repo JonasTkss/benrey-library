@@ -125,14 +125,29 @@ def parse_reply(content: str, known_ids: set[str]) -> tuple[str, list[str]]:
     """
     answer, sources = content.strip(), []
     match = re.search(r"\{.*\}", content, re.DOTALL)
+    data = None
     if match:
         try:
             data = json.loads(match.group(0))
         except ValueError:
             data = None
-        if isinstance(data, dict) and isinstance(data.get("answer"), str):
-            answer = data["answer"].strip()
-            raw_sources = data.get("sources")
-            if isinstance(raw_sources, list):
-                sources = [s for s in raw_sources if isinstance(s, str) and s in known_ids]
+    if isinstance(data, dict) and isinstance(data.get("answer"), str):
+        answer = data["answer"].strip()
+        raw_sources = data.get("sources")
+        if isinstance(raw_sources, list):
+            sources = [s for s in raw_sources if isinstance(s, str) and s in known_ids]
+    else:
+        # Broken or cut-off JSON (a free model hit its token limit mid-reply):
+        # salvage the answer text instead of showing raw JSON to the user.
+        partial = PARTIAL_ANSWER.search(content)
+        if partial:
+            try:
+                answer = json.loads(f'"{partial.group(1)}"').strip()
+            except ValueError:
+                answer = partial.group(1).strip()
+            sources = [s for s in re.findall(r"[a-z]+\.[a-z_]+", content) if s in known_ids]
     return answer[:MAX_ANSWER_CHARS], list(dict.fromkeys(sources))
+
+
+# The value of "answer" up to its closing quote, or to the end if it was cut off.
+PARTIAL_ANSWER = re.compile(r'"answer"\s*:\s*"((?:[^"\\]|\\.)*)', re.DOTALL)

@@ -3,7 +3,7 @@
 A small book lending library run entirely from a customized Django admin: catalogue, members,
 loans, two staff roles, covers in object storage, and an AI help widget that explains the forms.
 
-- **Live:** _LIVE_URL_ (free tier, so the first request after idle can take a few seconds)
+- **Live:** https://web-production-fb1ad.up.railway.app (the home page redirects to the admin login)
 - **Access:** demo accounts for both roles (`admin_demo`, `librarian_demo`) are sent by email,
   not stored in this repo. To run your own copy, see [Quick start](#quick-start).
 
@@ -106,8 +106,9 @@ checks; nothing is just hidden with CSS.
 - Config fails fast: production will not start without a strong `SECRET_KEY`, `ALLOWED_HOSTS`,
   `DATABASE_URL` and all bucket settings. It never falls back to SQLite or local disk, and it
   never reads a `.env` file.
-- Admin served at a configurable `ADMIN_URL`. That is obscurity, not security; it only keeps
-  bots away from the login form.
+- Admin served at a configurable `ADMIN_URL`. That is obscurity, not security. On the demo
+  the home page redirects to it for the reviewers' convenience, so here it is not hidden at all;
+  the real protection is authentication, lockout and permissions.
 - Clean 403/404/500 pages, no stack traces (`DEBUG=False`).
 - CI: `check --deploy`, `pip-audit`, `bandit`, gitleaks over the full history, Dependabot.
 

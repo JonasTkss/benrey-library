@@ -25,6 +25,18 @@ def test_parse_json_inside_code_fence():
     assert (answer, sources) == ("Thirteen digits.", ["book.isbn"])
 
 
+def test_parse_salvages_cut_off_json():
+    raw = '{"answer": "You can extend it by up to 7 days, see loan.due_date and \\"extended\\'
+    answer, sources = client.parse_reply(raw, KNOWN)
+    assert answer == 'You can extend it by up to 7 days, see loan.due_date and "extended'
+    assert sources == ["loan.due_date"]
+
+
+def test_parse_salvages_json_with_trailing_garbage():
+    raw = '{"answer": "Thirteen digits.", "sources": ["book.isbn"],}'
+    assert client.parse_reply(raw, KNOWN) == ("Thirteen digits.", ["book.isbn"])
+
+
 @pytest.mark.parametrize("raw", ["Just prose, no JSON.", '{"answer": 5}', "{broken json"])
 def test_parse_non_json_falls_back_to_raw_text(raw):
     answer, sources = client.parse_reply(raw, KNOWN)
