@@ -15,6 +15,9 @@ STORAGES = {
 OPENROUTER_API_KEY = "test-key"
 OPENROUTER_MODELS = ["test/model-a:free", "test/model-b:free"]
 AXES_ENABLED = True
+# Most tests send many requests from one test client IP; rate limits get
+# their own tests (config/tests/test_ratelimit.py), which switch it back on.
+RATELIMIT_ENABLED = False
 
 # Keep test output readable: tests deliberately trigger 403s and lockouts.
 LOGGING = LOGGING | {"root": {"handlers": ["console"], "level": "ERROR"}}  # noqa: F405

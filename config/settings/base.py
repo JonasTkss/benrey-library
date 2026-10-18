@@ -50,6 +50,10 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    # After WhiteNoise (static files are not counted), before everything that
+    # touches the database (sessions, auth), so a flood is rejected cheaply.
+    "config.ratelimit.RateLimitMiddleware",
+    "config.ratelimit.SecurityHeadersMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -100,8 +104,16 @@ CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.db.DatabaseCache",
         "LOCATION": "django_cache",
-    }
+    },
+    # Per-process, for the coarse per-IP request limit (see config/ratelimit.py).
+    "ratelimit": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
 }
+
+# Per-IP request limits (config/ratelimit.py), requests per minute.
+RATELIMIT_PER_MINUTE = 300
+RATELIMIT_LOGIN_PER_MINUTE = 10
+RATELIMIT_ASSISTANT_PER_MINUTE = 30
+RATELIMIT_COVERS_PER_MINUTE = 300
 
 # --- Auth -----------------------------------------------------------------
 AUTHENTICATION_BACKENDS = [
@@ -134,11 +146,13 @@ SESSION_COOKIE_AGE = 60 * 60 * 8  # one working day, not Django's 2-week default
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 
-# django-axes: 5 failed logins for the same username from the same IP locks
-# that combination for 15 minutes.
+# django-axes: 5 failed logins lock for 15 minutes, counted two ways:
+# - per username+IP: someone guessing one account's password,
+# - per IP alone: one client trying many usernames (credential stuffing).
+# Never per username alone: an attacker could then lock real staff out.
 AXES_FAILURE_LIMIT = 5
 AXES_COOLOFF_TIME = 0.25  # hours
-AXES_LOCKOUT_PARAMETERS = [["username", "ip_address"]]
+AXES_LOCKOUT_PARAMETERS = [["username", "ip_address"], "ip_address"]
 AXES_RESET_ON_SUCCESS = True
 # Which address counts as "the client" (see config/client_ip.py). Off locally,
 # where there is no proxy; prod.py turns it on behind Railway's edge.
@@ -230,7 +244,6 @@ LOGGING = {
 # No inline scripts anywhere: the chat widget is a static JS file. Django's
 # admin templates still use a few inline style="" attributes, so styles allow
 # 'unsafe-inline'; style injection is a far smaller risk than script injection.
-_storage_origin = env("AWS_S3_ENDPOINT_URL", default="").split("/storage/")[0].rstrip("/")
 CONTENT_SECURITY_POLICY = {
     "DIRECTIVES": {
         "default-src": ["'self'"],
@@ -239,7 +252,9 @@ CONTENT_SECURITY_POLICY = {
         # our own origin and no inline <script> is allowed.
         "script-src": ["'self'", "'unsafe-eval'"],
         "style-src": ["'self'", "'unsafe-inline'"],
-        "img-src": ["'self'", "data:"] + ([_storage_origin] if _storage_origin else []),
+        # Covers are served through the app (library/views.py), so the
+        # browser never contacts the storage provider.
+        "img-src": ["'self'", "data:"],
         "connect-src": ["'self'"],
         "font-src": ["'self'"],
         "object-src": ["'none'"],
