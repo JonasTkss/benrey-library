@@ -135,8 +135,12 @@ The **Ask AI** button answers two kinds of question.
 - **Data questions** ("Who has the highest bill?", "Is Dune on the shelf?", "Find member Anna"):
   the model is given a list of allowed read-only lookups (`assistant/lookups.py`: top fees,
   overdue loans, find member, a member's loans, top borrowers now and all time, most borrowed
-  books, top authors, an author's books, book availability, today's totals) and replies only
-  with the lookup's name and a search term. The server checks the user's permission, runs the query,
+  books, top authors, an author's books, book availability, today's totals, and **statistics**:
+  fees due, overdue share, members, catalogue, lending per period, average loan length and
+  late-return rate, genres, overview) and replies only with the lookup's name and parameters.
+  **Follow-ups** ("what about overdue loans?", "and last month?") work because the last three
+  turns are sent too, but an earlier data answer is sent only as the lookup the model chose,
+  never its result. The server checks the user's permission, runs the query,
   and writes the answer with links to the member, loan or book. **No member data is ever sent
   to the model**, numbers cannot be invented, and nobody can see more than their role allows.
   The prompt only lists lookups the user's role may run. If the AI is down, keyword routing

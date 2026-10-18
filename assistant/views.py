@@ -49,6 +49,9 @@ Rules:
 4. Keep answers under 80 words, plain text, no markdown.
 5. Reply with JSON only: either {{"answer": "...", "sources": ["model.field", ...]}} where
    sources are the ids (like "loan.due_date") of the fields used, or a lookup as in rule 2.
+6. Earlier turns of the conversation may be included. Use them to understand follow-ups
+   ("what about overdue loans?", "and last month?"): usually the same lookup with different
+   params. For totals, counts, averages or shares, use the statistics lookup.
 
 # Data lookups you can request
 {lookups}
@@ -99,16 +102,17 @@ def ask(request):
     if limited:
         return error(limited, 429)
 
-    payload = answer_question(request.user, question, model_id, field_name)
+    earlier = request.session.get(HISTORY_KEY, [])
+    payload = answer_question(request.user, question, model_id, field_name, earlier)
     remember(request, question, payload, client_id)
     return JsonResponse(payload)
 
 
-def answer_question(user, question, model_id, field_name) -> dict:
+def answer_question(user, question, model_id, field_name, earlier=()) -> dict:
     if not client.is_configured():
         return fallback_answer(question, model_id, field_name, user) | {"disabled": True}
 
-    messages = build_messages(question, model_id, field_name, user)
+    messages = build_messages(question, model_id, field_name, user, earlier)
     try:
         reply = client.complete(messages)
     except client.AssistantUnavailable:
@@ -157,9 +161,14 @@ def clear_history(request):
     return JsonResponse({"messages": []})
 
 
-def build_messages(question: str, model_id: str | None, field_name: str | None, user) -> list[dict]:
+FOLLOW_UP_TURNS = 3  # earlier question/answer pairs sent for context
+
+
+def build_messages(
+    question: str, model_id: str | None, field_name: str | None, user, earlier=()
+) -> list[dict]:
     """The system prompt is fixed text plus generated context; the user's text
-    only ever goes into the user message. Only lookups this user may run are
+    only ever goes into user messages. Only lookups this user may run are
     offered, and no row data is included."""
     system = SYSTEM_PROMPT.format(
         context=context.build_context(model_id, field_name),
@@ -167,8 +176,30 @@ def build_messages(question: str, model_id: str | None, field_name: str | None, 
     )
     return [
         {"role": "system", "content": system},
+        *previous_turns(earlier),
         {"role": "user", "content": question},
     ]
+
+
+def previous_turns(history) -> list[dict]:
+    """Recent conversation so follow-ups ("what about overdue loans?") work.
+
+    Earlier questions go in as the user typed them. Earlier answers go in only
+    as what the model itself produced: the lookup it chose (name + params), or
+    the field explanation. The data a lookup returned (names, fees, counts) is
+    never sent to the model."""
+    turns = []
+    for message in list(history)[-2 * FOLLOW_UP_TURNS :]:
+        if message.get("role") == "user":
+            turns.append({"role": "user", "content": message.get("text", "")})
+        elif message.get("lookup"):
+            choice = {"lookup": message["lookup"], "params": message.get("lookup_params", {})}
+            turns.append({"role": "assistant", "content": json.dumps(choice)})
+        else:
+            ids = [s.get("id") for s in message.get("sources", [])]
+            reply_ = {"answer": message.get("answer", ""), "sources": ids}
+            turns.append({"role": "assistant", "content": json.dumps(reply_)})
+    return turns
 
 
 def clean_question(value) -> str | None:
@@ -225,6 +256,8 @@ def lookup_answer(user, name: str, params: dict, *, degraded: bool = False) -> d
         "sources": [],
         "results": [{"label": r.label, "detail": r.detail, "url": r.url} for r in result.rows],
         "lookup": name,
+        # Kept so a follow-up question knows what was asked; never the result data.
+        "lookup_params": result.params,
         "grounded": True,  # straight from the database
         "degraded": degraded,
     }
@@ -235,8 +268,8 @@ def fallback_answer(question: str, model_id: str | None, field_name: str | None,
     keywords; anything else gets the help_text of the field the user asked
     about (by name or label), or of every field on the current page."""
     guessed = lookups.guess(question) if user is not None else None
-    if guessed and user.has_perm(lookups.LOOKUPS[guessed].permission):
-        return lookup_answer(user, guessed, {}, degraded=True)
+    if guessed and user.has_perm(lookups.LOOKUPS[guessed[0]].permission):
+        return lookup_answer(user, *guessed, degraded=True)
 
     fields = [f for m in context.get_models() for f in m.fields]
     # Prefer fields on the page the user is on, then the focused field.

@@ -21,6 +21,8 @@ from django.utils import timezone
 
 from library.models import Author, Book, Loan, Member
 
+from . import stats
+
 DEFAULT_LIMIT, MAX_LIMIT = 5, 10
 MIN_QUERY, MAX_QUERY = 2, 100
 
@@ -40,6 +42,7 @@ class Row:
 class LookupResult:
     summary: str
     rows: list[Row] = field(default_factory=list)
+    params: dict = field(default_factory=dict)  # the validated params that were used
 
 
 @dataclass(frozen=True)
@@ -49,6 +52,8 @@ class Lookup:
     params: dict[str, str]  # parameter name -> description (all optional or strings)
     permission: str
     run: Callable[..., LookupResult]
+    choices: dict[str, dict[str, str]] = field(default_factory=dict)  # enum params
+    defaults: dict[str, str] = field(default_factory=dict)
 
 
 def _member_url(member):
@@ -272,6 +277,11 @@ def member_loans(query):
     return LookupResult(f"{member.full_name} has {len(loans)} book(s) on loan:", rows)
 
 
+def statistics(metric, period):
+    summary, rows = stats.METRICS[metric][1](period, Row)
+    return LookupResult(summary, rows)
+
+
 def circulation_summary():
     today = timezone.localdate()
     active = Loan.objects.active()
@@ -372,6 +382,20 @@ LOOKUPS = {
             author_books,
         ),
         Lookup(
+            "statistics",
+            "Library statistics and totals (sums, counts, averages, shares). Pick a metric; "
+            "loans_activity, loan_length, genres and members also take a period.",
+            {
+                "metric": "one of: "
+                + "; ".join(f"{k} = {desc}" for k, (desc, _) in stats.METRICS.items()),
+                "period": "one of: " + ", ".join(stats.PERIODS) + " (default all)",
+            },
+            "library.view_loan",
+            statistics,
+            choices={"metric": dict.fromkeys(stats.METRICS, ""), "period": stats.PERIODS},
+            defaults={"metric": "overview", "period": "all"},
+        ),
+        Lookup(
             "circulation_summary",
             "Today's totals: books on loan, overdue, due soon, lent and returned today.",
             {},
@@ -408,12 +432,19 @@ def run(user, name, params) -> LookupResult:
         except (TypeError, ValueError):
             limit = DEFAULT_LIMIT
         kwargs["limit"] = max(1, min(MAX_LIMIT, limit))
+    for name_, allowed in lookup.choices.items():
+        value = params.get(name_, lookup.defaults.get(name_))
+        if value not in allowed:
+            value = lookup.defaults.get(name_)  # unknown choice: fall back, never pass through
+        kwargs[name_] = value
     if "query" in lookup.params:
         query = params.get("query")
         if not isinstance(query, str) or not MIN_QUERY <= len(query.strip()) <= MAX_QUERY:
             raise LookupRejected("a search term of 2-100 characters is needed")
         kwargs["query"] = query.strip()
-    return lookup.run(**kwargs)
+    result = lookup.run(**kwargs)
+    result.params = kwargs
+    return result
 
 
 # Keyword routing for when the AI is unavailable. Deliberately narrow: only
@@ -424,20 +455,59 @@ FEES = {"fee", "fees", "bill", "bills", "owe", "owes", "owing", "debt", "pay"}
 LOANS = {"loan", "loans", "borrowed", "borrows", "borrowing", "books"}
 
 
-def guess(question: str) -> str | None:
+# "totals" (plural, e.g. "today's totals") is left to circulation_summary.
+STATS = {
+    "total",
+    "sum",
+    "average",
+    "avg",
+    "percent",
+    "percentage",
+    "share",
+    "statistics",
+    "stats",
+    "rate",
+    "much",
+}
+PERIOD_WORDS = {"today": "today", "week": "week", "month": "month", "year": "year"}
+
+
+def _stats_metric(words: set[str]) -> str:
+    if words & FEES or "unpaid" in words:
+        return "fees_due"
+    if words & {"overdue", "late"} and not words & {"kept", "long"}:
+        return "overdue"
+    if words & {"genre", "genres"}:
+        return "genres"
+    if words & {"kept", "long", "length", "late"}:
+        return "loan_length"
+    if words & {"member", "members", "suspended"}:
+        return "members"
+    if words & {"lent", "borrowed", "returned", "returns"}:
+        return "loans_activity"
+    if words & {"book", "books", "copies", "catalogue", "titles", "shelf"}:
+        return "catalogue"
+    return "overview"
+
+
+def guess(question: str) -> tuple[str, dict] | None:
+    """(lookup name, params) for clear data questions, else None."""
     words = set(re.findall(r"[a-z]+", question.lower()))
+    if words & STATS:
+        period = next((p for w, p in PERIOD_WORDS.items() if w in words), "all")
+        return "statistics", {"metric": _stats_metric(words), "period": period}
     if not words & ASKING:
         return None
     if words & FEES:
-        return "top_fees"
+        return "top_fees", {}
     if words & {"author", "authors", "writer", "writers", "wrote"} and words & RANKING:
-        return "top_authors"
+        return "top_authors", {}
     if words & {"overdue", "late"}:
-        return "overdue_loans"
+        return "overdue_loans", {}
     if words & {"popular", "read"} or ({"book", "books"} & words and "borrowed" in words):
-        return "popular_books"
+        return "popular_books", {}
     if words & LOANS and words & RANKING:
-        return "top_borrowers"
+        return "top_borrowers", {}
     if words & {"today", "summary", "totals", "loan", "loans"}:
-        return "circulation_summary"
+        return "circulation_summary", {}
     return None

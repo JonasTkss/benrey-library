@@ -267,3 +267,26 @@ what the alternative was, what breaks at scale.
 - **Bug found while testing:** "Maxwell Barrett has 10 books" when he has 17. The lookup
   counted the rows it shows (capped at 10) instead of the total. It now reports the total and
   links to the author page.
+
+## Phase 12: statistics and follow-up questions in Ask AI
+
+- **Statistics** (`assistant/stats.py`): one `statistics` lookup with an allow-listed
+  `metric` (fees_due, overdue, members, catalogue, loans_activity, loan_length, genres,
+  overview) and `period` (today, week, month, year, all). Each metric is one or two aggregate
+  queries. An unknown metric or period falls back to the default and is never passed through.
+  The model chooses the metric; the server computes the number.
+- **"Unpaid" is answered honestly:** payments are not recorded, so the fees answer says it
+  counts books still out and that fees on returned books are not tracked. The same sentence is
+  in the rules the model reads.
+- **Follow-ups** (`views.previous_turns`): the last 3 exchanges go to the model. User
+  questions as typed; earlier answers only as the model's own output (`{"lookup": ...,
+  "params": ...}` or the field explanation). Results stay on the server. Tested:
+  `test_follow_up_sends_earlier_turns_without_data` checks that a member name and a euro amount
+  from an earlier answer never reach the provider.
+- **Made-up policy fixed:** asked "when should I suspend her", the model invented reasons
+  ("violating rules such as unpaid fees") because the rules said nothing about it. The rules now
+  state that there is no automatic suspension rule and it is the administrator's decision. That
+  is the general fix for hallucination here: make the source of truth say it explicitly.
+- **Checked with the real model:** fees total → `statistics/fees_due`; "what about in overdue
+  loans" → `statistics/overdue` (resolved from context); "this month" / "this year" → the
+  right period.

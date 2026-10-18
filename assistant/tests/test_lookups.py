@@ -136,7 +136,8 @@ def test_lookups_respect_permissions(db):
     ],
 )
 def test_keyword_router(question, expected):
-    assert lookups.guess(question) == expected
+    guessed = lookups.guess(question)
+    assert (guessed[0] if guessed else None) == expected
 
 
 # --- through the endpoint --------------------------------------------------------
@@ -257,7 +258,7 @@ def test_member_loans(admin_user):
     ],
 )
 def test_keyword_router_new_questions(question, expected):
-    assert lookups.guess(question) == expected
+    assert lookups.guess(question)[0] == expected
 
 
 def test_librarian_gets_the_new_lookups(librarian):
@@ -274,3 +275,70 @@ def test_author_books_reports_the_real_total(admin_user):
     result = lookups.run(admin_user, "author_books", {"query": "very prolific"})
     assert result.summary.startswith(f"Very Prolific has {lookups.MAX_LIMIT + 2} book(s)")
     assert result.rows[-1].label == "All books by Very Prolific"
+
+
+# --- statistics and follow-ups ------------------------------------------------------
+
+
+def test_statistics_fees_due_total(admin_user):
+    late_loan(MemberFactory(), 4)  # €2.00
+    late_loan(MemberFactory(), 2)  # €1.00
+    result = lookups.run(admin_user, "statistics", {"metric": "fees_due"})
+    assert result.summary.startswith("€3.00 in late fees is due right now, owed by 2 members")
+    assert "payments are not recorded" in result.summary
+
+
+@pytest.mark.parametrize("metric", list(lookups.stats.METRICS))
+@pytest.mark.parametrize("period", list(lookups.stats.PERIODS))
+def test_every_metric_and_period_runs(admin_user, metric, period):
+    late_loan(MemberFactory(), 3)
+    LoanFactory(status="returned", returned_at=timezone.now())
+    result = lookups.run(admin_user, "statistics", {"metric": metric, "period": period})
+    assert result.summary
+    assert result.params == {"metric": metric, "period": period}
+
+
+def test_unknown_metric_falls_back_to_overview(admin_user):
+    result = lookups.run(admin_user, "statistics", {"metric": "DROP TABLE", "period": "x"})
+    assert result.params == {"metric": "overview", "period": "all"}
+
+
+@pytest.mark.parametrize(
+    ("question", "metric", "period"),
+    [
+        ("how much in total has been in unpaid loans", "fees_due", "all"),  # from the live demo
+        ("what is the average loan length this month", "loan_length", "month"),
+        ("how many members in total", "members", "all"),
+        ("library statistics", "overview", "all"),
+    ],
+)
+def test_keyword_router_statistics(question, metric, period):
+    assert lookups.guess(question) == ("statistics", {"metric": metric, "period": period})
+
+
+def test_follow_up_sends_earlier_turns_without_data(librarian_client, openrouter):
+    rich = MemberFactory(full_name="Hidden Name")
+    late_loan(rich, 6)
+    openrouter.responses = [
+        reply('{"lookup": "statistics", "params": {"metric": "fees_due"}}'),
+        reply('{"lookup": "statistics", "params": {"metric": "overdue"}}'),
+    ]
+    ask(librarian_client, "how much in total has been in unpaid loans")
+    data = ask(librarian_client, "what about in overdue loans").json()
+    assert data["lookup"] == "statistics" and "overdue" in data["answer"]
+
+    second = openrouter.requests[1]["messages"]
+    assert [m["role"] for m in second] == ["system", "user", "assistant", "user"]
+    assert second[1]["content"] == "how much in total has been in unpaid loans"
+    assert json.loads(second[2]["content"]) == {
+        "lookup": "statistics",
+        "params": {"metric": "fees_due", "period": "all"},
+    }
+    sent = json.dumps(openrouter.requests)
+    assert "Hidden Name" not in sent and "€3.00" not in sent  # results never go to the model
+
+
+def test_rules_say_suspension_is_a_manual_decision():
+    from assistant.context import business_rules
+
+    assert "no automatic suspension rule" in business_rules()

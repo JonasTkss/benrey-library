@@ -45,6 +45,11 @@ def business_rules() -> str:
             "- A loan can only be created if the book has a free copy and is not withdrawn.",
             f"- A member can have at most {settings.MAX_ACTIVE_LOANS} books on loan at once.",
             "- Suspended members cannot borrow. Only administrators can suspend or reactivate.",
+            "- The system has no automatic suspension rule: whether and when to suspend a member "
+            "is the administrator's decision. Suspending does not take back books already "
+            "on loan.",
+            "- Payments are not recorded. 'Fees due' means late fees on books still out; fees "
+            "on books already returned are not tracked as paid or unpaid.",
             "- A member cannot borrow a second copy of a book they already have.",
             f"- The default loan period is {LOAN_PERIOD_DAYS} days.",
             f"- A loan can be extended once, by up to {MAX_EXTENSION_DAYS} days, and not when "
