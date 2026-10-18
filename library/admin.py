@@ -417,7 +417,11 @@ class MemberAdmin(LibraryModelAdmin):
             readonly.append("status")
         return readonly
 
-    def has_change_status_permission(self, request):
+    def has_change_status_permission(self, request, obj=None):
+        # Used by the bulk actions and the Suspend/Reactivate buttons. A method
+        # rather than a "library.change_member_status" string: Unfold's system
+        # check looks such strings up in the database, which fails on a fresh
+        # database (CI) before migrations have run.
         return can_change_member_status(request)
 
     @display(
@@ -506,7 +510,7 @@ class MemberAdmin(LibraryModelAdmin):
     @action(
         description="Suspend member",
         url_path="suspend",
-        permissions=["library.change_member_status"],
+        permissions=["change_status"],
         icon="block",
     )
     def suspend_member(self, request, object_id):
@@ -515,7 +519,7 @@ class MemberAdmin(LibraryModelAdmin):
     @action(
         description="Reactivate member",
         url_path="reactivate",
-        permissions=["library.change_member_status"],
+        permissions=["change_status"],
         icon="check_circle",
     )
     def reactivate_member(self, request, object_id):
