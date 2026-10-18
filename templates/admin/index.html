@@ -9,7 +9,7 @@
       <p class="dash-eyebrow">{% now "l, j F Y" %}</p>
       <h1 class="dash-title">Welcome back, {{ user.get_short_name|default:user.username }}</h1>
       <p class="dash-sub">Signed in as <strong>{{ role_names }}</strong>.
-        New here? Read <a href="{% url 'admin:guide' %}">How to use</a>, or press <kbd>? Help</kbd> on any form.</p>
+        New here? Read <a href="{% url 'admin:guide' %}">How to use</a>, or press <kbd>Ask AI</kbd> on any page.</p>
     </div>
     <div class="dash-actions">
       {% if can_add_loan %}

@@ -26,7 +26,7 @@ A short tour:
    result message says how many were returned and lists any that were skipped and why.
 3. **Books** → availability badges, filters (genre, availability, publication period), search by
    title / ISBN / author, loan history inline on each book.
-4. Click **? Help** (bottom right) on any form and ask, for example, "how long can I extend
+4. Click **Ask AI** (bottom right) on any page and ask, for example, "how long can I extend
    the due date?"
 5. Log in as the librarian and try `/<admin>/library/book/add/` or a delete URL: both return 403.
 
@@ -130,7 +130,7 @@ checks; nothing is just hidden with CSS.
 
 ## AI help assistant
 
-The **? Help** button answers two kinds of question.
+The **Ask AI** button answers two kinds of question.
 
 - **Data questions** ("Who has the highest bill?", "Is Dune on the shelf?", "Find member Anna"):
   the model is given a list of allowed read-only lookups (`assistant/lookups.py`: top fees,

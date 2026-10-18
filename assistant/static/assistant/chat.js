@@ -39,7 +39,8 @@
     return node;
   }
 
-  const toggle = el("button", "assistant-toggle", "? Help");
+  const toggle = el("button", "assistant-toggle");
+  toggle.append(el("span", "material-symbols-outlined assistant-toggle-icon", "auto_awesome"), "Ask AI");
   toggle.type = "button";
   toggle.setAttribute("aria-expanded", "false");
   toggle.setAttribute("aria-controls", "assistant-panel");
@@ -47,10 +48,10 @@
   const panel = el("section", "assistant-panel");
   panel.id = "assistant-panel";
   panel.hidden = true;
-  panel.setAttribute("aria-label", "Library help assistant");
+  panel.setAttribute("aria-label", "Ask AI assistant");
 
   const header = el("div", "assistant-header");
-  header.appendChild(el("strong", "", "Library help"));
+  header.appendChild(el("strong", "", "Ask AI"));
   const close = el("button", "assistant-close", "×");
   close.type = "button";
   close.setAttribute("aria-label", "Close help");

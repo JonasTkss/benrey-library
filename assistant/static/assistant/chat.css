@@ -15,6 +15,13 @@
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
+.assistant-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.assistant-toggle-icon { font-size: 18px; }
 .assistant-toggle:hover { background: var(--color-primary-700); }
 .assistant-panel {
   position: absolute;
