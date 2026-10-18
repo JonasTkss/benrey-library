@@ -14,6 +14,7 @@ ignore = ["S101"]  # assert is fine in tests
 
 [tool.ruff.lint.per-file-ignores]
 "*/tests/*" = ["S105", "S106", "S311"]
+"conftest.py" = ["S106"]
 "library/management/commands/seed_demo.py" = ["S311"]  # Faker/random for demo data, not crypto
 
 [tool.pytest.ini_options]
