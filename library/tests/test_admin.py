@@ -381,3 +381,45 @@ def test_svg_upload_through_admin_is_rejected(admin_client):
     response = admin_client.post(url("library_book_add"), data)
     assert response.status_code == 200
     assert not Book.objects.filter(title="Bad").exists()
+
+
+# --- author page and single-member suspend --------------------------------------
+
+
+@pytest.mark.parametrize("who", ["admin_client", "librarian_client"])
+def test_author_page_lists_their_books(request, who):
+    client = request.getfixturevalue(who)
+    author = AuthorFactory(name="Listed Author")
+    book = BookFactory(title="Visible Book", authors=[author], copies_total=2)
+    html = client.get(url("library_author_change", author.pk)).content.decode()
+    assert "Visible Book" in html
+    assert url("library_book_change", book.pk) in html
+    assert "2 of 2 on the shelf" in html
+
+
+def test_admin_suspends_one_member_after_confirming(admin_client):
+    member = MemberFactory()
+    suspend = url("library_member_suspend_member", member.pk)
+    page = admin_client.get(url("library_member_change", member.pk)).content.decode()
+    assert suspend in page  # the button is on the member page
+    # The link only opens a confirmation page; nothing changes on GET.
+    assert admin_client.get(suspend).status_code == 200
+    member.refresh_from_db()
+    assert member.status == Member.Status.ACTIVE
+    admin_client.post(suspend)
+    member.refresh_from_db()
+    assert member.status == Member.Status.SUSPENDED
+    # Now the page offers Reactivate instead.
+    page = admin_client.get(url("library_member_change", member.pk)).content.decode()
+    assert url("library_member_reactivate_member", member.pk) in page
+    assert suspend not in page
+
+
+def test_librarian_cannot_suspend_one_member(librarian_client):
+    member = MemberFactory()
+    page = librarian_client.get(url("library_member_change", member.pk)).content.decode()
+    assert url("library_member_suspend_member", member.pk) not in page
+    response = librarian_client.post(url("library_member_suspend_member", member.pk))
+    assert response.status_code == 403
+    member.refresh_from_db()
+    assert member.status == Member.Status.ACTIVE

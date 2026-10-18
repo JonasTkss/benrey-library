@@ -1,0 +1,21 @@
+{% extends "admin/base_site.html" %}
+{# Confirmation step for the Suspend / Reactivate buttons on a member page. #}
+
+{% block content %}
+<div class="panel confirm-panel">
+  <h2 class="dash-title">{{ title }}</h2>
+  {% if suspending %}
+    <p class="dash-sub">{{ member.full_name }} ({{ member.card_number }}) will not be able to borrow until reactivated.
+      Books they have now stay on their account{% if member.active_loan_count %} ({{ member.active_loan_count }} on loan){% endif %}.</p>
+  {% else %}
+    <p class="dash-sub">{{ member.full_name }} ({{ member.card_number }}) will be able to borrow again.</p>
+  {% endif %}
+  <form method="post" class="confirm-actions">
+    {% csrf_token %}
+    <button type="submit" class="dash-btn {% if suspending %}dash-btn--danger{% else %}dash-btn--primary{% endif %}">
+      {% if suspending %}Yes, suspend{% else %}Yes, reactivate{% endif %}
+    </button>
+    <a class="dash-btn" href="{{ cancel_url }}">Cancel</a>
+  </form>
+</div>
+{% endblock %}

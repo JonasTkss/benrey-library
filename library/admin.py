@@ -20,11 +20,13 @@ from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group, User
 from django.db.models import Count, Exists, F, OuterRef
+from django.shortcuts import get_object_or_404, redirect
+from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from unfold.admin import ModelAdmin, TabularInline
-from unfold.decorators import display
+from unfold.decorators import action, display
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 from unfold.widgets import UnfoldAdminTextInputWidget
 
@@ -255,6 +257,8 @@ class AuthorAdmin(LibraryModelAdmin):
     search_fields = ["name"]
     list_per_page = 50
     ordering = ["name"]
+    fields = ["name", "born_year", "bio", "book_list"]
+    readonly_fields = ["book_list"]
 
     def get_queryset(self, request):
         return super().get_queryset(request).annotate(annotated_books=Count("books"))
@@ -262,6 +266,36 @@ class AuthorAdmin(LibraryModelAdmin):
     @admin.display(description="books", ordering="annotated_books")
     def book_count(self, author):
         return author.annotated_books
+
+    @admin.display(description="books in the catalogue")
+    def book_list(self, author):
+        """The author's books with availability, each linking to the book. Shown
+        to every role (librarians see the author page read-only)."""
+        if author.pk is None:
+            return "Books appear here once the author is saved and added to a book."
+        books = Book.objects.with_availability().filter(authors=author).order_by("title")
+        if not books:
+            return "No books by this author yet."
+        rows = format_html_join(
+            "",
+            '<tr><td><a class="lib-link" href="{}">{}</a></td><td>{}</td><td>{}</td></tr>',
+            (
+                (
+                    reverse("admin:library_book_change", args=[b.pk]),
+                    b.title,
+                    b.published_year or "-",
+                    "withdrawn"
+                    if b.is_withdrawn
+                    else f"{b.copies_available} of {b.copies_total} on the shelf",
+                )
+                for b in books
+            ),
+        )
+        return format_html(
+            '<table class="lib-table"><thead><tr><th>Title</th><th>Published</th>'
+            "<th>Availability</th></tr></thead><tbody>{}</tbody></table>",
+            rows,
+        )
 
 
 # --- Book --------------------------------------------------------------------
@@ -364,6 +398,8 @@ class MemberAdmin(LibraryModelAdmin):
     list_per_page = 50
     readonly_fields = ["card_number", "fees_due_display", "open_loans_link"]
     actions = ["suspend_members", "reactivate_members"]
+    # Buttons at the top of the member page (Admin role only).
+    actions_detail = ["suspend_member", "reactivate_member"]
     inlines = [LendBookInline, MemberLoanInline]
 
     def get_queryset(self, request):
@@ -452,6 +488,63 @@ class MemberAdmin(LibraryModelAdmin):
     def reactivate_members(self, request, queryset):
         updated = queryset.exclude(status=Member.Status.ACTIVE).update(status=Member.Status.ACTIVE)
         self.message_user(request, f"{updated} member(s) reactivated.")
+
+    # --- single-member buttons ------------------------------------------------
+
+    def get_actions_detail(self, request, object_id):
+        """Offer only the button that makes sense: Suspend for an active
+        member, Reactivate for a suspended one."""
+        buttons = super().get_actions_detail(request, object_id)
+        member = Member.objects.filter(pk=object_id).only("status").first()
+        hide = (
+            "reactivate_member"
+            if member and member.status == Member.Status.ACTIVE
+            else ("suspend_member")
+        )
+        return [b for b in buttons if not b.action_name.endswith(hide)]
+
+    @action(
+        description="Suspend member",
+        url_path="suspend",
+        permissions=["library.change_member_status"],
+        icon="block",
+    )
+    def suspend_member(self, request, object_id):
+        return self._set_status(request, object_id, Member.Status.SUSPENDED)
+
+    @action(
+        description="Reactivate member",
+        url_path="reactivate",
+        permissions=["library.change_member_status"],
+        icon="check_circle",
+    )
+    def reactivate_member(self, request, object_id):
+        return self._set_status(request, object_id, Member.Status.ACTIVE)
+
+    def _set_status(self, request, object_id, status):
+        """The button is a link (GET), which must not change data, so it opens
+        a confirmation page; only its POST (CSRF-protected) changes the status."""
+        member = get_object_or_404(Member, pk=object_id)
+        change_url = reverse("admin:library_member_change", args=[member.pk])
+        if request.method == "POST":
+            member.status = status
+            member.save(update_fields=["status"])
+            verb = "suspended" if status == Member.Status.SUSPENDED else "reactivated"
+            self.message_user(request, f"{member} was {verb}.", level=messages.SUCCESS)
+            return redirect(change_url)
+        suspending = status == Member.Status.SUSPENDED
+        return TemplateResponse(
+            request,
+            "admin/library/member/status_confirm.html",
+            {
+                **self.admin_site.each_context(request),
+                "title": f"{'Suspend' if suspending else 'Reactivate'} {member}?",
+                "opts": self.model._meta,
+                "member": member,
+                "suspending": suspending,
+                "cancel_url": change_url,
+            },
+        )
 
 
 # --- Loan --------------------------------------------------------------------

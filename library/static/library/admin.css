@@ -68,6 +68,10 @@ a.lib-link {
 
 td.field-card_number, td.field-fees_due_display { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
+.lib-table { width: 100%; max-width: 640px; border-collapse: collapse; font-size: 13px; }
+.lib-table th, .lib-table td { padding: 6px 10px; border-bottom: 1px solid var(--lib-border); text-align: left; }
+.lib-table th { color: var(--lib-muted); font-weight: 600; }
+
 /* --- dashboard -------------------------------------------------------- */
 .dash { display: flex; flex-direction: column; gap: 24px; padding: 8px 0 32px; }
 .dash-hello {
@@ -276,3 +280,9 @@ kbd {
   .dash-grid, .guide { grid-template-columns: 1fr; }
   .guide-toc { position: static; }
 }
+
+/* --- confirmation pages ------------------------------------------------- */
+.confirm-panel { max-width: 560px; margin: 24px 0; }
+.confirm-actions { display: flex; gap: 8px; margin-top: 16px; }
+.dash-btn--danger { background: #b91c1c; border-color: #b91c1c; color: #fff; }
+.dash-btn--danger:hover { background: #991b1b; }
