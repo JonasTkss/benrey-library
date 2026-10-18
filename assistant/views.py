@@ -52,6 +52,9 @@ Rules:
 6. Earlier turns of the conversation may be included. Use them to understand follow-ups
    ("what about overdue loans?", "and last month?"): usually the same lookup with different
    params. For totals, counts, averages or shares, use the statistics lookup.
+7. Any question about money owed, unpaid or due (in total) is a data question: run statistics
+   with metric fees_due. Its answer already explains what is and is not tracked, so do not
+   answer it from the rules yourself.
 
 # Data lookups you can request
 {lookups}
