@@ -244,3 +244,26 @@ what the alternative was, what breaks at scale.
 - **Also fixed:** librarians saw an empty "Administration" heading in the sidebar (Unfold
   hides forbidden links but still draws the group title). `sidebar_navigation` now removes
   empty groups per user.
+
+## Phase 11: feedback from clicking through the live demo
+
+- **"As a librarian it won't give anything":** questions like "which author has the most books"
+  or "who has the most loans" had no matching lookup, so the model correctly said it couldn't
+  answer. Added lookups: top authors, an author's books, a member's current loans, top
+  borrowers (now), most loans ever, most borrowed books. Keyword routing covers them too.
+  The fix was more allow-listed queries, not giving the model the data.
+- **Model:** `openai/gpt-4.1-mini` is now first in `OPENROUTER_MODELS` (a Railway variable,
+  no code change), with the free models behind it. ~$0.001 per question; the key has a $5 cap,
+  and the per-user rate limit (10/min, 100/day) bounds spend. Routing is now ~1.5 s.
+- **Author page shows their books** (`AuthorAdmin.book_list`): a read-only table with links
+  and availability, visible to both roles.
+- **Ask AI button covered Save:** Unfold's save bar is sticky at the bottom on wide screens;
+  the widget now measures `#submit-row` and sits above it.
+- **Suspending one member:** previously only a bulk action (hidden in the action menu).
+  Now a "Suspend member" / "Reactivate member" button on the member page (Unfold
+  `actions_detail`), gated by `library.change_member_status`. The button is a link, and GET
+  must not change data, so it opens a confirmation page whose POST (CSRF-protected) does the
+  change. Librarians do not get the button and a forged POST returns 403 (tested).
+- **Bug found while testing:** "Maxwell Barrett has 10 books" when he has 17. The lookup
+  counted the rows it shows (capped at 10) instead of the total. It now reports the total and
+  links to the author page.

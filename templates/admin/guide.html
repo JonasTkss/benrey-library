@@ -99,8 +99,10 @@
     {% if can_change_status %}
     <section id="suspend" class="guide-step guide-step--admin">
       <h2><span class="material-symbols-outlined">block</span>Suspend a member <span class="pill">Admin</span></h2>
-      <p>Tick members in <a href="{% url 'admin:library_member_changelist' %}">Members</a> and run <strong>Suspend selected members</strong>.
-        Suspended members keep their current books but cannot borrow new ones. <strong>Reactivate selected members</strong> undoes it.</p>
+      <p>Open the member and press <strong>Suspend member</strong> at the top of the page, then confirm. For several at once, tick them in
+        <a href="{% url 'admin:library_member_changelist' %}">Members</a> and run <strong>Suspend selected members</strong>.
+        Suspended members keep their current books but cannot borrow new ones. <strong>Reactivate member</strong> undoes it.
+        Librarians cannot suspend; they see the status as read-only.</p>
     </section>
     {% endif %}
 
@@ -128,7 +130,8 @@
         <li><strong>About a form:</strong> <em>"What does due date mean?"</em>, <em>"How many books can a member borrow?"</em>.
           Click into a field first and the assistant knows which one you mean. Answers come from this system's own field descriptions and rules, and show which fields they are based on.</li>
         <li><strong>About the library right now:</strong> <em>"Who has the highest bill?"</em>, <em>"Is Dune on the shelf?"</em>,
-          <em>"Find member Anna"</em>, <em>"How many books are overdue?"</em>. The answer comes straight from the database with links to the member, loan or book,
+          <em>"Find member Anna"</em>, <em>"What does Anna have on loan?"</em>, <em>"Which author has the most books?"</em>,
+          <em>"Who has the most books on loan?"</em>, <em>"Most borrowed books"</em>, <em>"How many books are overdue?"</em>. The answer comes straight from the database with links to the member, loan or book,
           and only shows what your role may see.</li>
       </ul>
       <p class="guide-tip">The AI only decides which question you asked; it never sees member names, emails or fees. If the AI service is down, simple questions still work and field help is shown instead.

@@ -32,6 +32,16 @@
   const root = document.createElement("div");
   root.id = "assistant-root";
   document.body.appendChild(root);
+
+  // Form pages have a sticky save bar at the bottom (#submit-row); sit above
+  // it so the button never covers Save.
+  function clearSaveBar() {
+    const bar = document.getElementById("submit-row");
+    const sticky = bar && getComputedStyle(bar).position === "sticky";
+    root.style.bottom = sticky ? bar.offsetHeight + 16 + "px" : "";
+  }
+  clearSaveBar();
+  window.addEventListener("resize", clearSaveBar);
   let lastField = null;
 
   // Which model's form is open, from a URL like /<admin>/library/loan/12/change/.

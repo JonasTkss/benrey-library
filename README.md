@@ -134,8 +134,9 @@ The **Ask AI** button answers two kinds of question.
 
 - **Data questions** ("Who has the highest bill?", "Is Dune on the shelf?", "Find member Anna"):
   the model is given a list of allowed read-only lookups (`assistant/lookups.py`: top fees,
-  overdue loans, find member, book availability, today's totals) and replies only with the
-  lookup's name and a search term. The server checks the user's permission, runs the query,
+  overdue loans, find member, a member's loans, top borrowers now and all time, most borrowed
+  books, top authors, an author's books, book availability, today's totals) and replies only
+  with the lookup's name and a search term. The server checks the user's permission, runs the query,
   and writes the answer with links to the member, loan or book. **No member data is ever sent
   to the model**, numbers cannot be invented, and nobody can see more than their role allows.
   The prompt only lists lookups the user's role may run. If the AI is down, keyword routing
@@ -158,6 +159,9 @@ The **Ask AI** button answers two kinds of question.
 - **Abuse:** staff only, CSRF, 3-500 characters, control characters stripped, 10/min and
   100/day per user. Replies are rendered with `textContent`, so returned HTML is shown as text,
   never run. Only form metadata is sent to the model, never member data.
+- **Model choice:** `openai/gpt-4.1-mini` first (about $0.001 per question, ~1.5 s, a $5 cap
+  on the key), then two free models as fallbacks. Free models alone were often rate-limited
+  (429) and slower; the fallback chain means the paid model running out only costs speed.
 - **Free-tier caveats:** free models are rate limited and sometimes removed. Pick current ones
   from openrouter.ai/models and list two or three.
 
