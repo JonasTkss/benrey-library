@@ -26,7 +26,7 @@ markers = ["postgres: needs a real PostgreSQL database (row locks)"]
 
 [tool.coverage.run]
 source = ["library", "assistant", "config"]
-omit = ["*/migrations/*", "*/tests/*", "config/wsgi.py", "manage.py"]
+omit = ["*/migrations/*", "*/tests/*", "config/wsgi.py", "manage.py", "config/settings/dev.py", "config/settings/prod.py"]
 
 [tool.coverage.report]
 skip_empty = true

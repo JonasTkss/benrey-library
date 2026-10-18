@@ -95,3 +95,34 @@ what the alternative was, what breaks at scale.
   `is_superuser` or grant per-user permissions (`StaffUserAdmin`).
 - **Auth:** Argon2, 12-char validators, 8h DB sessions, session key rotated at login, row deleted
   at logout, axes locks username+IP after 5 failures for 15 min (HTTP 429). `config/tests/test_auth.py`.
+
+## Phase 5: object storage and uploads
+
+- **Covers go to Supabase Storage through its S3-compatible API** (`django-storages` S3 backend,
+  `STORAGES["default"]` in `config/settings/prod.py`). Private bucket, `querystring_auth=True`:
+  every image URL is a signed URL valid for 1 hour, generated locally (no network call per row).
+- **Why not local disk:** Railway's container filesystem is ephemeral. It is wiped on every
+  deploy, not shared between instances, and has no backups or CDN. Files would disappear on
+  the next push.
+- **No silent fallback:** prod refuses to boot without the bucket variables. Dev uses local disk
+  only with an explicit `USE_LOCAL_STORAGE=1`.
+- **Upload checks (`library/validators.py`):** extension allow-list (jpg/png/webp, so no SVG
+  and its scripts), 2 MB cap, Pillow opens and `verify()`s the bytes (an `.exe` renamed `.png`
+  fails), format re-checked from content, 4000px cap plus decompression-bomb guard. The stored
+  name is `covers/<uuid4>.<ext>`; the user's filename never becomes a path. Request body capped
+  at 2.5 MB (`DATA_UPLOAD_MAX_MEMORY_SIZE`).
+
+## Phase 6: seed data
+
+- `python manage.py seed_demo --reset --seed 42`: 300 authors, 2000 books, 600 members,
+  6000 loans (80% returned history over two years, ~1200 open, ~1 in 8 of those overdue), and
+  100 generated gradient covers uploaded to the bucket. `--small` for tests, `--covers N`.
+- **The generator obeys the same rules as the app** (copies, 5-loan cap, one copy per member,
+  suspended members do not get new loans), so the admin never shows impossible states.
+  `test_seed_respects_the_borrowing_rules` checks it.
+- `bulk_create` in batches; the full seed takes a few seconds locally.
+- **Safety:** refuses to run twice without `--reset`; refuses `--reset` with `DEBUG` off unless
+  `--allow-production` is passed. Demo user passwords come only from `DEMO_*_PASSWORD` env vars,
+  are run through the password validators, and are never printed or committed.
+- `admin_demo` is a member of the **Admin group, not a superuser**, so the demo shows the role
+  system, not a superuser bypassing it.

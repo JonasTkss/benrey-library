@@ -341,3 +341,43 @@ def test_book_copies_cannot_drop_below_loans(admin_client):
     response = admin_client.post(url("library_book_change", book.pk), data)
     assert response.status_code == 200
     assert Book.objects.get(pk=book.pk).copies_total == 2
+
+
+def test_cover_upload_through_admin_is_stored_under_random_name(admin_client):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    from .test_validators import png_bytes
+
+    author = AuthorFactory()
+    data = {
+        "title": "Uploaded",
+        "authors": [author.pk],
+        "isbn": "978-0-13-468599-1",
+        "genre": "fiction",
+        "copies_total": 1,
+        "cover_image": SimpleUploadedFile("My Cover.png", png_bytes(), "image/png"),
+        "loans-TOTAL_FORMS": "0",
+        "loans-INITIAL_FORMS": "0",
+    }
+    response = admin_client.post(url("library_book_add"), data)
+    assert response.status_code == 302
+    name = Book.objects.get(title="Uploaded").cover_image.name
+    assert name.startswith("covers/") and "My Cover" not in name
+
+
+def test_svg_upload_through_admin_is_rejected(admin_client):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    data = {
+        "title": "Bad",
+        "authors": [AuthorFactory().pk],
+        "isbn": "978-0-13-468599-1",
+        "genre": "fiction",
+        "copies_total": 1,
+        "cover_image": SimpleUploadedFile("x.svg", b"<svg onload='alert(1)'/>", "image/svg+xml"),
+        "loans-TOTAL_FORMS": "0",
+        "loans-INITIAL_FORMS": "0",
+    }
+    response = admin_client.post(url("library_book_add"), data)
+    assert response.status_code == 200
+    assert not Book.objects.filter(title="Bad").exists()
