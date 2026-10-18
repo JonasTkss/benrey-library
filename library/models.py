@@ -19,6 +19,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import Count, DurationField, ExpressionWrapper, F, Q, Sum, Value
 from django.db.models.functions import Coalesce, Lower
+from django.urls import reverse
 from django.utils import timezone
 
 from .validators import (
@@ -160,6 +161,13 @@ class Book(models.Model):
     def save(self, *args, **kwargs):
         self.isbn = normalize_isbn(self.isbn)
         super().save(*args, **kwargs)
+
+    @property
+    def cover_url(self) -> str:
+        """Same-origin URL for the cover (see library/views.py), or "" if none."""
+        if not self.cover_image:
+            return ""
+        return reverse("cover", args=[os.path.basename(self.cover_image.name)])
 
     @property
     def copies_on_loan(self) -> int:

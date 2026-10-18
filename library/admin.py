@@ -335,14 +335,14 @@ class BookAdmin(LibraryModelAdmin):
         if not book.cover_image:
             return format_html('<span class="cover-thumb cover-thumb--empty">{}</span>', "–")
         return format_html(
-            '<img src="{}" class="cover-thumb" alt="" loading="lazy">', book.cover_image.url
+            '<img src="{}" class="cover-thumb" alt="" loading="lazy">', book.cover_url
         )
 
     @admin.display(description="cover")
     def cover_preview(self, book):
         if not book.cover_image:
             return "No cover uploaded."
-        return format_html('<img src="{}" class="cover-preview" alt="">', book.cover_image.url)
+        return format_html('<img src="{}" class="cover-preview" alt="">', book.cover_url)
 
     @display(description="circulation", ordering="is_withdrawn", label="warning")
     def withdrawn_label(self, book):
