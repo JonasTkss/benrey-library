@@ -8,6 +8,7 @@ computed, never stored, so they cannot drift.
 """
 
 import os
+import secrets
 import uuid
 from datetime import date, timedelta
 from decimal import Decimal
@@ -16,8 +17,8 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
-from django.db.models import Count, F, Q
-from django.db.models.functions import Lower
+from django.db.models import Count, DurationField, ExpressionWrapper, F, Q, Sum, Value
+from django.db.models.functions import Coalesce, Lower
 from django.utils import timezone
 
 from .validators import (
@@ -189,13 +190,42 @@ class Book(models.Model):
 # --- Member ----------------------------------------------------------------
 
 
+def new_card_number() -> str:
+    """Random 8-digit library card number, e.g. LIB-40217735. Random rather than
+    sequential so card numbers do not reveal how many members there are."""
+    return f"LIB-{secrets.randbelow(10**8):08d}"
+
+
 class MemberQuerySet(models.QuerySet):
     def with_loan_counts(self):
+        """Open, overdue and fees-due figures per member in one query.
+
+        Fees due = late fee for every day past due on books the member still
+        has. Stored as total days late (Postgres date arithmetic); the euro
+        amount is derived in Member.fees_due, so sorting by days = sorting
+        by fee."""
         today = timezone.localdate()
         active = Q(loans__status=Loan.Status.ACTIVE)
+        overdue = active & Q(loans__due_date__lt=today)
+        days_late = ExpressionWrapper(
+            Value(today, output_field=models.DateField()) - F("loans__due_date"),
+            output_field=DurationField(),
+        )
         return self.annotate(
             annotated_active_loans=Count("loans", filter=active),
-            annotated_overdue_loans=Count("loans", filter=active & Q(loans__due_date__lt=today)),
+            annotated_overdue_loans=Count("loans", filter=overdue),
+            # Zero (not NULL) for members who owe nothing, so sorting works both ways.
+            annotated_days_late=Coalesce(
+                Sum(days_late, filter=overdue), Value(timedelta(0), output_field=DurationField())
+            ),
+        )
+
+    def by_fees_due(self):
+        """Members who owe something, highest bill first."""
+        return (
+            self.with_loan_counts()
+            .filter(annotated_days_late__gt=timedelta(0))
+            .order_by(F("annotated_days_late").desc(), "full_name")
         )
 
 
@@ -204,6 +234,14 @@ class Member(models.Model):
         ACTIVE = "active", "Active"
         SUSPENDED = "suspended", "Suspended"
 
+    card_number = models.CharField(
+        max_length=12,
+        unique=True,
+        default=new_card_number,
+        editable=False,
+        help_text="Library card number (e.g. LIB-40217735), printed on the member's card. "
+        "Assigned automatically; search by it to find a member at the desk.",
+    )
     full_name = models.CharField(
         max_length=200, db_index=True, help_text="Member's full name as on their library card."
     )
@@ -257,6 +295,17 @@ class Member(models.Model):
         if self.pk is None:
             return 0
         return self.loans.overdue().count()
+
+    @property
+    def fees_due(self) -> Decimal:
+        """Late fees accrued on books this member still has, as of today."""
+        if hasattr(self, "annotated_days_late"):
+            days = self.annotated_days_late.days
+        elif self.pk is None:
+            days = 0
+        else:
+            days = sum(loan.days_overdue() for loan in self.loans.overdue())
+        return LATE_FEE_PER_DAY * days
 
 
 # --- Loan ------------------------------------------------------------------

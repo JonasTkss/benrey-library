@@ -66,6 +66,8 @@ a.lib-link {
   text-underline-offset: 2px;
 }
 
+td.field-card_number, td.field-fees_due_display { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
 /* --- dashboard -------------------------------------------------------- */
 .dash { display: flex; flex-direction: column; gap: 24px; padding: 8px 0 32px; }
 .dash-hello {

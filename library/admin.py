@@ -351,16 +351,18 @@ class BookAdmin(LibraryModelAdmin):
 class MemberAdmin(LibraryModelAdmin):
     list_display = [
         "full_name",
+        "card_number",
         "email",
         "status_badge",
         "active_loans",
         "overdue_badge",
+        "fees_due_display",
         "joined_at",
     ]
     list_filter = ["status", MemberOverdueFilter, "joined_at"]
-    search_fields = ["full_name", "email"]
+    search_fields = ["full_name", "email", "=card_number"]
     list_per_page = 50
-    readonly_fields = ["open_loans_link"]
+    readonly_fields = ["card_number", "fees_due_display", "open_loans_link"]
     actions = ["suspend_members", "reactivate_members"]
     inlines = [LendBookInline, MemberLoanInline]
 
@@ -369,7 +371,9 @@ class MemberAdmin(LibraryModelAdmin):
 
     def get_fields(self, request, obj=None):
         fields = ["full_name", "email", "status", "joined_at"]
-        return fields + ["open_loans_link"] if obj else fields
+        if obj is None:  # the card number is assigned on save
+            return fields
+        return ["card_number", *fields, "fees_due_display", "open_loans_link"]
 
     def get_readonly_fields(self, request, obj=None):
         readonly = list(super().get_readonly_fields(request, obj))
@@ -397,6 +401,11 @@ class MemberAdmin(LibraryModelAdmin):
         if not member.overdue_loan_count:
             return None
         return f"{member.overdue_loan_count} overdue"
+
+    @admin.display(description="fees due", ordering="annotated_days_late")
+    def fees_due_display(self, member):
+        fee = member.fees_due
+        return f"€{fee:.2f}" if fee else "-"
 
     @admin.display(description="return or extend")
     def open_loans_link(self, member):
@@ -463,7 +472,7 @@ class LoanAdmin(LibraryModelAdmin):
     ]
     list_select_related = ["book", "member"]
     list_filter = ["status", LoanDueFilter, "extended", "due_date"]
-    search_fields = ["book__title", "member__full_name", "member__email"]
+    search_fields = ["book__title", "member__full_name", "member__email", "=member__card_number"]
     autocomplete_fields = ["book", "member"]
     date_hierarchy = "loaned_on"
     list_per_page = 100
