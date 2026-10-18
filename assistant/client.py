@@ -7,6 +7,7 @@ model. The whole call has a hard time budget so a slow provider cannot hang
 an admin page's request.
 """
 
+import hashlib
 import json
 import logging
 import re
@@ -15,6 +16,7 @@ from dataclasses import dataclass
 
 import httpx
 from django.conf import settings
+from django.core.cache import cache
 
 logger = logging.getLogger(__name__)
 
@@ -44,11 +46,29 @@ def is_configured() -> bool:
     return bool(settings.OPENROUTER_API_KEY and settings.OPENROUTER_MODELS)
 
 
+REPLY_CACHE_SECONDS = 600
+
+
 def complete(messages: list[dict], *, http: httpx.Client | None = None) -> ModelReply:
-    """Return the first usable reply from the fallback chain."""
+    """Return the first usable reply from the fallback chain.
+
+    Identical requests (same prompt, same question, same earlier turns) within
+    10 minutes reuse the stored reply: no second paid call, instant answer.
+    The cached value is the model's own output (a lookup choice or a field
+    explanation), never library data, because that is all it ever produces."""
     if not is_configured():
         raise AssistantUnavailable("not configured")
+    payload = json.dumps([settings.OPENROUTER_MODELS, messages], sort_keys=True)
+    key = "ai:" + hashlib.sha256(payload.encode()).hexdigest()
+    hit = cache.get(key)
+    if hit:
+        return ModelReply(**hit)
+    reply = _complete_uncached(messages, http)
+    cache.set(key, {"content": reply.content, "model": reply.model}, REPLY_CACHE_SECONDS)
+    return reply
 
+
+def _complete_uncached(messages, http):
     headers = {
         "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
         "X-Title": "Benrey Library admin assistant",

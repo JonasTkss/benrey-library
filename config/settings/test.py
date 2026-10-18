@@ -22,3 +22,10 @@ RATELIMIT_ENABLED = False
 # Keep test output readable: tests deliberately trigger 403s and lockouts.
 LOGGING = LOGGING | {"root": {"handlers": ["console"], "level": "ERROR"}}  # noqa: F405
 LOGGING["loggers"] = {"django.request": {"level": "CRITICAL"}, "axes": {"level": "ERROR"}}
+
+# In-memory caches in tests (cleared before each test by conftest.py), so
+# tests without database access can still use cached code paths.
+CACHES = {
+    "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "t"},
+    "ratelimit": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "r"},
+}

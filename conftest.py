@@ -1,5 +1,6 @@
 import pytest
 from django.contrib.auth.models import Group, User
+from django.core.cache import caches
 from django.test import Client
 
 
@@ -35,3 +36,12 @@ def admin_client(admin_user):
 @pytest.fixture
 def librarian_client(librarian):
     return logged_in(librarian)
+
+
+@pytest.fixture(autouse=True)
+def fresh_caches():
+    """Cached dashboard figures, statistics or AI replies must not leak
+    between tests."""
+    for alias in ("default", "ratelimit"):
+        caches[alias].clear()
+    yield

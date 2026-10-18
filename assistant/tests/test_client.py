@@ -117,3 +117,16 @@ def test_request_shape(openrouter):
     assert sent["temperature"] == 0.2
     assert sent["max_tokens"] == client.MAX_TOKENS
     assert sent["messages"] == MESSAGES
+
+
+def test_identical_request_reuses_the_cached_reply(openrouter):
+    openrouter.responses = [reply("first")]
+    assert client.complete(MESSAGES).content == "first"
+    assert client.complete(MESSAGES).content == "first"
+    assert len(openrouter.requests) == 1  # second answer came from the cache, no paid call
+
+
+def test_different_question_is_not_served_from_cache(openrouter):
+    openrouter.responses = [reply("one"), reply("two")]
+    client.complete(MESSAGES)
+    assert client.complete([{"role": "user", "content": "other"}]).content == "two"

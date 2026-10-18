@@ -10,6 +10,7 @@ import json
 from datetime import timedelta
 
 from django.conf import settings
+from django.core.cache import cache
 from django.db.models import Count, Q, Sum
 from django.db.models.functions import TruncDate
 from django.urls import reverse, reverse_lazy
@@ -21,6 +22,15 @@ from assistant.context import business_rules
 from .models import LATE_FEE_PER_DAY, LOAN_PERIOD_DAYS, MAX_EXTENSION_DAYS, Book, Loan, Member
 
 CHART_DAYS = 14
+# Dashboard figures and the sidebar badge are shared by every user who may
+# see them, so one cached copy serves everyone. Up to a minute stale is fine
+# for an overview; the lists themselves are always live.
+CACHE_SECONDS = 60
+
+
+def cached(key, compute):
+    """Cache per calendar day too, so "today" figures never leak past midnight."""
+    return cache.get_or_set(f"dash:{key}:{timezone.localdate()}", compute, CACHE_SECONDS)
 
 
 def _perm(codename):
@@ -28,8 +38,8 @@ def _perm(codename):
 
 
 def overdue_badge(request):
-    """Number shown next to "Loans" in the sidebar."""
-    count = Loan.objects.overdue().count()
+    """Number shown next to "Loans" in the sidebar (on every page, so cached)."""
+    count = cached("overdue_badge", lambda: Loan.objects.overdue().count())
     return str(count) if count else None
 
 
@@ -181,7 +191,6 @@ CHART_OPTIONS = json.dumps(
 def dashboard_callback(request, context):
     """Adds the numbers for templates/admin/index.html."""
     user = request.user
-    today = timezone.localdate()
     can_loans = user.has_perm("library.view_loan")
     can_books = user.has_perm("library.view_book")
 
@@ -193,51 +202,66 @@ def dashboard_callback(request, context):
     context["can_add_book"] = user.has_perm("library.add_book")
 
     if can_loans:
-        active = Loan.objects.active()
-        stats = active.aggregate(
+        context.update(cached("loans", _loan_section))
+        context["activity_chart_options"] = CHART_OPTIONS
+    if user.has_perm("library.view_member"):
+        context["member_stats"] = cached("members", _member_section)
+    if can_books:
+        context["book_stats"] = cached("books", _book_section)
+    if user.has_perm("axes.view_accessattempt"):
+        context["show_security"] = True
+        context["failed_logins"] = cached("security", _failed_logins)
+    context["cache_seconds"] = CACHE_SECONDS
+    return context
+
+
+def _loan_section():
+    today = timezone.localdate()
+    active = Loan.objects.active()
+    soon = Q(due_date__gte=today, due_date__lte=today + timedelta(3))
+    return {
+        "loan_stats": active.aggregate(
             on_loan=Count("id"),
             overdue=Count("id", filter=Q(due_date__lt=today)),
-            due_soon=Count("id", filter=Q(due_date__gte=today, due_date__lte=today + timedelta(3))),
+            due_soon=Count("id", filter=soon),
             lent_today=Count("id", filter=Q(loaned_on=today)),
-        )
-        context["loan_stats"] = stats
-        context["overdue_loans"] = (
+        ),
+        # list(): cache the rows, not a lazy queryset.
+        "overdue_loans": list(
             Loan.objects.overdue().select_related("book", "member").order_by("due_date")[:8]
-        )
-        context["due_soon_loans"] = (
-            active.filter(due_date__gte=today, due_date__lte=today + timedelta(3))
-            .select_related("book", "member")
-            .order_by("due_date")[:6]
-        )
-        context["activity_chart"] = _loan_activity_chart(today)
-        context["activity_chart_options"] = CHART_OPTIONS
-        context["returned_today"] = Loan.objects.filter(returned_at__date=today).count()
+        ),
+        "due_soon_loans": list(
+            active.filter(soon).select_related("book", "member").order_by("due_date")[:6]
+        ),
+        "activity_chart": _loan_activity_chart(today),
+        "returned_today": Loan.objects.filter(returned_at__date=today).count(),
+    }
 
-    if user.has_perm("library.view_member"):
-        context["member_stats"] = Member.objects.aggregate(
-            active=Count("id", filter=Q(status=Member.Status.ACTIVE)),
-            suspended=Count("id", filter=Q(status=Member.Status.SUSPENDED)),
-        )
 
-    if can_books:
-        totals = Book.objects.aggregate(
-            titles=Count("id"),
-            copies=Sum("copies_total"),
-            withdrawn=Count("id", filter=Q(is_withdrawn=True)),
-        )
-        totals["copies"] = totals["copies"] or 0
-        totals["on_shelf"] = totals["copies"] - Loan.objects.active().count()
-        context["book_stats"] = totals
+def _member_section():
+    return Member.objects.aggregate(
+        active=Count("id", filter=Q(status=Member.Status.ACTIVE)),
+        suspended=Count("id", filter=Q(status=Member.Status.SUSPENDED)),
+    )
 
-    if user.has_perm("axes.view_accessattempt"):
-        from axes.models import AccessAttempt
 
-        context["show_security"] = True
-        context["failed_logins"] = AccessAttempt.objects.filter(
-            attempt_time__gte=timezone.now() - timedelta(days=1)
-        ).count()
+def _book_section():
+    totals = Book.objects.aggregate(
+        titles=Count("id"),
+        copies=Sum("copies_total"),
+        withdrawn=Count("id", filter=Q(is_withdrawn=True)),
+    )
+    totals["copies"] = totals["copies"] or 0
+    totals["on_shelf"] = totals["copies"] - Loan.objects.active().count()
+    return totals
 
-    return context
+
+def _failed_logins():
+    from axes.models import AccessAttempt
+
+    return AccessAttempt.objects.filter(
+        attempt_time__gte=timezone.now() - timedelta(days=1)
+    ).count()
 
 
 class GuideView(TemplateView):

@@ -15,6 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import timedelta
 
+from django.core.cache import cache
 from django.db.models import Count, Q
 from django.urls import reverse
 from django.utils import timezone
@@ -277,8 +278,16 @@ def member_loans(query):
     return LookupResult(f"{member.full_name} has {len(loans)} book(s) on loan:", rows)
 
 
+STATS_CACHE_SECONDS = 60
+
+
 def statistics(metric, period):
-    summary, rows = stats.METRICS[metric][1](period, Row)
+    """Aggregates over the whole library: the same for every user who may run
+    this lookup, so cached briefly (keyed per day so "today" stays correct)."""
+    key = f"stats:{metric}:{period}:{timezone.localdate()}"
+    summary, rows = cache.get_or_set(
+        key, lambda: stats.METRICS[metric][1](period, Row), STATS_CACHE_SECONDS
+    )
     return LookupResult(summary, rows)
 
 

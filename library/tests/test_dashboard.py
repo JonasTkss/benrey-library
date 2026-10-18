@@ -61,8 +61,12 @@ def test_sidebar_hides_administration_from_librarians(librarian_client, admin_cl
 
 
 def test_overdue_badge():
+    from django.core.cache import cache
+
     assert overdue_badge(None) is None
     overdue_loan()
+    assert overdue_badge(None) is None  # cached for up to a minute
+    cache.clear()
     assert overdue_badge(None) == "1"
 
 
@@ -78,3 +82,16 @@ def test_guide_requires_login(client):
     response = client.get(reverse("admin:guide"))
     assert response.status_code == 302
     assert reverse("admin:login") in response["Location"]
+
+
+def test_dashboard_figures_are_cached_briefly(librarian_client):
+    from django.db import connection
+    from django.test.utils import CaptureQueriesContext
+
+    LoanFactory()
+    with CaptureQueriesContext(connection) as first:
+        librarian_client.get(reverse("admin:index"))
+    with CaptureQueriesContext(connection) as second:
+        response = librarian_client.get(reverse("admin:index"))
+    assert len(second.captured_queries) < len(first.captured_queries)
+    assert response.context["loan_stats"]["on_loan"] == 1

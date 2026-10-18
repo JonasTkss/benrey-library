@@ -2,6 +2,7 @@ from datetime import timedelta
 
 import pytest
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
@@ -154,6 +155,7 @@ def test_changelist_query_count_does_not_grow_with_rows(admin_client, changelist
             LoanFactory(book=BookFactory(authors=authors))
 
     def count_queries():
+        cache.clear()  # measure the page itself, not the cached sidebar badge
         with CaptureQueriesContext(connection) as ctx:
             assert admin_client.get(url(changelist)).status_code == 200
         return len(ctx.captured_queries)
