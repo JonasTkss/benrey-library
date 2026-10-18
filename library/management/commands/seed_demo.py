@@ -150,7 +150,8 @@ class Command(BaseCommand):
         elif Book.objects.exists():
             raise CommandError("Library data already exists. Use --reset to replace it.")
 
-        self.rng = random.Random(opts["seed"])
+        # Seeded PRNG for reproducible demo data; nothing security-related.
+        self.rng = random.Random(opts["seed"])  # nosec B311
         self.fake = Faker()
         self.fake.seed_instance(opts["seed"])
         self.today = timezone.localdate()

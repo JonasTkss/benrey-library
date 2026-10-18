@@ -32,7 +32,11 @@ SECURE_SSL_REDIRECT = True
 SECURE_REDIRECT_EXEMPT = [r"^healthz$"]
 SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=31536000)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-SECURE_HSTS_PRELOAD = False  # preload is a one-way door; not for a demo domain
+# Preload is a one-way door (browsers hard-code HTTPS-only for the whole
+# domain), and the demo runs on a platform subdomain I do not own. The check
+# that asks for it is silenced deliberately, not by accident.
+SECURE_HSTS_PRELOAD = False
+SILENCED_SYSTEM_CHECKS = ["security.W021"]
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 CSRF_COOKIE_HTTPONLY = True

@@ -2,7 +2,8 @@
 
 from .base import *  # noqa: F403
 
-SECRET_KEY = "test-only-key"  # noqa: S105 - test settings, not a real secret
+# Test settings only; never loaded outside pytest.
+SECRET_KEY = "test-only-key"  # noqa: S105  # nosec B105
 ALLOWED_HOSTS = ["testserver", "localhost"]
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]  # speed only
 
