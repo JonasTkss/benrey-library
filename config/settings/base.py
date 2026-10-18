@@ -159,6 +159,8 @@ AXES_RESET_ON_SUCCESS = True
 AXES_CLIENT_IP_CALLABLE = "config.client_ip.client_ip"
 TRUST_X_REAL_IP = False
 
+CSRF_FAILURE_VIEW = "config.views.csrf_failure"
+
 # --- Security headers shared by all environments ---------------------------
 X_FRAME_OPTIONS = "DENY"
 SECURE_CONTENT_TYPE_NOSNIFF = True

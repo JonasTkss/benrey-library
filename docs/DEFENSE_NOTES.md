@@ -290,3 +290,29 @@ what the alternative was, what breaks at scale.
 - **Checked with the real model:** fees total → `statistics/fees_due`; "what about in overdue
   loans" → `statistics/overdue` (resolved from context); "this month" / "this year" → the
   right period.
+
+## Phase 13: security audit, rate limits, caching, single origin, AI tutorials
+
+- **"Proxy through Next.js so the network tab shows the frontend URL":** there was nothing to
+  proxy. Pages, forms and Ask AI already went to the one app URL; the AI provider is called
+  server-side. The only foreign origin was the storage provider, through signed cover links.
+  Covers are now streamed through `/covers/<uuid>` instead (staff only, only files that belong
+  to a book, cached for a year). A second service would have added latency and cookie/CSRF
+  forwarding for no extra hiding, and a hand-built front end over the generated admin.
+- **No open endpoints, proven by a test** (`test_no_open_endpoints.py`): walks all ~75 routes as
+  anonymous (GET and POST) and as a role-less staff account. Checked by adding a leaking route:
+  the test caught it.
+- **Rate limits** (`config/ratelimit.py`): per IP, before sessions and auth touch the DB, so a
+  flood is rejected cheaply. Login and assistant counters are in the shared DB cache; the broad
+  limit uses per-process memory to avoid a DB write per page view (documented trade-off).
+- **IP-wide lockout:** axes now also locks an IP after 5 failures across usernames
+  (credential stuffing). Deliberately never per username alone, which would let anyone lock
+  real staff out.
+- **Caching:** dashboard sections, the sidebar badge and statistics are the same for everyone
+  who may see them → one shared copy for 60 s, keyed per day. Identical AI requests are cached
+  for 10 min (saves money; the cached value is only the model's own output).
+- **AI tutorials:** example questions in the empty panel; any `data-ask` element asks its
+  question; a clickable step-by-step tutorial in the guide and a card on the dashboard; a one-time
+  tip on first visit.
+- **Audit report:** `docs/SECURITY_AUDIT.md`. Scans clean; open items are account-level
+  (rotate keys pasted in chat, least-privileged DB role, 2FA).

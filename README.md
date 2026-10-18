@@ -104,6 +104,10 @@ checks; nothing is just hidden with CSS.
 
 ## Security
 
+Full audit, endpoint inventory and findings: [docs/SECURITY_AUDIT.md](docs/SECURITY_AUDIT.md).
+A test walks every URL as an anonymous visitor and as a staff account without a role, so no
+endpoint can hand out data by accident.
+
 - Passwords: Argon2, validators (min 12 chars, common, numeric, similarity). Demo passwords
   come from env vars only.
 - Sessions: DB-backed, 8 hours, `HttpOnly`, `Secure`, `SameSite=Lax`, rotated at login,
@@ -126,6 +130,13 @@ checks; nothing is just hidden with CSS.
   the home page redirects to it for the reviewers' convenience, so here it is not hidden at all;
   the real protection is authentication, lockout and permissions.
 - Clean 403/404/500 pages, no stack traces (`DEBUG=False`).
+- Rate limits per IP (`config/ratelimit.py`): 10 login POSTs, 30 assistant calls and 300 other
+  requests per minute; axes also locks an IP after 5 failed logins across any usernames.
+- Single origin: the browser only ever talks to the app. Cover images are streamed from the
+  private bucket through `/covers/<uuid>` (staff only), so the storage provider never appears.
+- Caching: dashboard figures, the overdue badge and statistics for 60 s, identical AI requests
+  for 10 min, covers in the browser for a year (their names never change), static files
+  forever (hashed names).
 - CI: `check --deploy`, `pip-audit`, `bandit`, gitleaks over the full history, Dependabot.
 
 ## AI help assistant

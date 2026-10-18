@@ -15,3 +15,13 @@ def healthz(request):
     except Exception:  # noqa: BLE001 - any DB failure means "unhealthy"
         return JsonResponse({"status": "error", "db": "unreachable"}, status=503)
     return JsonResponse({"status": "ok"})
+
+
+def csrf_failure(request, reason=""):
+    """Short 403 instead of Django's explanatory CSRF page; JSON for the
+    assistant's endpoints so the widget can show it."""
+    from django.shortcuts import render
+
+    if request.path.startswith("/assistant/"):
+        return JsonResponse({"error": "Your session expired. Reload the page."}, status=403)
+    return render(request, "403.html", status=403)

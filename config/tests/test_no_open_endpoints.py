@@ -125,3 +125,15 @@ def test_home_page_only_redirects_to_login(client):
     assert response.status_code == 302
     follow = client.get(response["Location"])
     assert follow.status_code == 302 and "login" in follow["Location"]
+
+
+def test_csrf_failure_is_a_short_403(librarian):
+    from django.test import Client
+
+    strict = Client(enforce_csrf_checks=True)
+    strict.force_login(librarian)
+    api = strict.post("/assistant/history/clear/")
+    assert api.status_code == 403 and "session expired" in api.json()["error"]
+    page = strict.post("/" + __import__("django.conf").conf.settings.ADMIN_URL + "logout/")
+    assert page.status_code == 403
+    assert b"Referer" not in page.content  # not Django's long explanation
