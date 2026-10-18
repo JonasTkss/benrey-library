@@ -54,7 +54,7 @@ Browser ──HTTPS──▶ Railway (gunicorn + WhiteNoise, Django 5.2)
 | Framework | **Python 3.12 + Django 5.2 LTS** | The brief grades a *generated* admin. Django's admin is the most complete one I know: list filters, search, inlines, actions, autocomplete and per-model permissions that the admin itself enforces. Roles become data instead of `if role ==` checks. Rails + ActiveAdmin is similar, but I am faster in Python. Headless CMSs (Strapi, Payload) are more moving parts and have weaker per-action permissions. 5.2 is the LTS line. |
 | Database | **Supabase Postgres** | Real managed Postgres with a free tier. The model leans on Postgres features: partial unique constraints, check constraints, `SELECT ... FOR UPDATE`. Using the same provider for storage means one less account and dashboard. |
 | Object storage | **Supabase Storage via its S3 API** (`django-storages`) | Standard S3 protocol, so the provider can be swapped through env vars (R2, B2, AWS). Private bucket, signed URLs. |
-| Hosting | **Railway** | Deploys from GitHub, HTTPS by default, config as code (`railway.toml`) with a pre-deploy migrate step and a health check gate. Render was the alternative; Railway's pre-deploy command and health-checked deploys made it simpler. |
+| Hosting | **Railway** | Deploys from GitHub, HTTPS by default, a pre-deploy migrate step and a health check gate. Render was the alternative; Railway's pre-deploy command and health-checked deploys made it simpler. |
 | Auth | Django auth, **Argon2**, DB sessions, **django-axes** | Framework auth is audited; Argon2 is memory-hard (more resistant to GPU cracking than the PBKDF2 default). DB sessions can be revoked server-side. Axes adds lockout. |
 | AI | **OpenRouter** with a chain of `:free` models | One OpenAI-compatible API, many models, free tier. A free model being rate-limited is normal, so falling through to the next model is designed in. |
 | Tests | pytest, pytest-django, factory_boy, time-machine | Short, readable tests; time-machine freezes "today" for overdue/fee tests. |
@@ -162,10 +162,15 @@ Seed options: `--seed N` (deterministic), `--small` (tiny set), `--covers N`, `-
 ### Deploying (Railway + Supabase)
 
 1. Supabase: create a project. Copy the **session pooler** connection string (add
-   `?sslmode=require`). Create a private Storage bucket `covers` and an S3 access key.
-2. Railway: new project from the GitHub repo. `railway.toml` already defines the build
-   (`collectstatic`), pre-deploy (`migrate`, `createcachetable`), start command and the
-   `/healthz` health check.
+   `?sslmode=require`). The direct `db.<ref>.supabase.co` host is IPv6-only, which Railway's
+   outbound network does not reach; the pooler is IPv4. Create a private Storage bucket `covers` and an S3 access key.
+2. Railway: new service from the GitHub repo, region EU West (close to the Supabase
+   database), with these service settings:
+   - Build command: `python manage.py collectstatic --noinput`
+   - Pre-deploy command: `python manage.py migrate --noinput && python manage.py createcachetable`
+   - Start command: `gunicorn config.wsgi --bind 0.0.0.0:$PORT --workers 2 --timeout 30 --access-logfile -`
+   - Health check path: `/healthz` (a deploy only takes traffic once this returns 200)
+   - Restart policy: on failure, 3 retries
 3. Set the variables from `.env.example` in Railway (`DJANGO_SETTINGS_MODULE=config.settings.prod`,
    a 50+ character `SECRET_KEY`, hosts, `ADMIN_URL`, DB, bucket, OpenRouter).
 4. Seed once from a machine with the production env: `seed_demo --reset --allow-production`.

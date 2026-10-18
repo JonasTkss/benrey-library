@@ -17,9 +17,13 @@ what the alternative was, what breaks at scale.
   is replaced instead of causing a 500. If the DB drops *mid*-request, the transaction rolls back
   and the user gets the clean 500 page; `/healthz` reports 503 so Railway sees the outage.
 - **Railway + Supabase instead of Render + Neon:** one place for data (Postgres and S3-compatible
-  storage both in Supabase), one place for compute. `railway.toml` runs `collectstatic` at build,
+  storage both in Supabase), one place for compute. The Railway service runs `collectstatic` at build,
   `migrate` as a pre-deploy step (runs once, not per worker), gunicorn with 2 workers, and
-  `/healthz` as the deploy health check so a broken build never takes traffic.
+  `/healthz` as the deploy health check so a broken build never takes traffic. (These are
+  service settings listed in the README; Railway deprecated `railway.toml`.) The app runs in
+  Railway's EU West region, next to the Supabase database in eu-west-1, so each query is a
+  short hop. The database is reached through Supabase's IPv4 session pooler because the
+  direct host is IPv6-only.
 - **DB cache instead of locmem:** gunicorn runs 2 worker processes; a per-process cache would make
   the assistant rate limit 2x as loose. At 10x traffic I would switch to Redis.
 
