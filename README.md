@@ -46,6 +46,7 @@ Browser ──HTTPS──▶ Railway (gunicorn + WhiteNoise, Django 5.2)
   `dashboard.py` (sidebar menu, dashboard numbers, guide page),
   `validators.py` (ISBN, cover uploads), `management/commands/seed_demo.py`.
 - `assistant/`: the help widget. `context.py` (grounding from model metadata),
+  `lookups.py` (allow-listed read-only data queries the model can request),
   `client.py` (OpenRouter + fallback), `views.py` (endpoint, validation, rate limit,
   non-AI fallback), `static/assistant/` (widget JS/CSS).
 - `config/`: settings split into `base` / `dev` / `test` / `prod`, URLs, `/healthz`,
@@ -69,6 +70,9 @@ Browser ──HTTPS──▶ Railway (gunicorn + WhiteNoise, Django 5.2)
 ## Data model and business rules
 
 `Author` ←M2M→ `Book` ←FK─ `Loan` ─FK→ `Member`. `Book.cover_image` is the upload field.
+Every member has a random, unique library card number (`LIB-xxxxxxxx`) for lookups at the desk,
+and a computed **fees due** total: late fees on books they still have, summed in SQL so the
+member list can sort by highest bill.
 
 Rules (in `library/models.py` and `library/services.py`, never in views or templates):
 - A loan needs a free copy (`copies_available > 0`), a book that is not withdrawn, and an
@@ -126,7 +130,17 @@ checks; nothing is just hidden with CSS.
 
 ## AI help assistant
 
-- **Grounding:** each request builds context from the live model definitions: field id
+The **? Help** button answers two kinds of question.
+
+- **Data questions** ("Who has the highest bill?", "Is Dune on the shelf?", "Find member Anna"):
+  the model is given a list of allowed read-only lookups (`assistant/lookups.py`: top fees,
+  overdue loans, find member, book availability, today's totals) and replies only with the
+  lookup's name and a search term. The server checks the user's permission, runs the query,
+  and writes the answer with links to the member, loan or book. **No member data is ever sent
+  to the model**, numbers cannot be invented, and nobody can see more than their role allows.
+  The prompt only lists lookups the user's role may run. If the AI is down, keyword routing
+  handles the common questions.
+- **Field questions, grounding:** each request builds context from the live model definitions: field id
   (`loan.due_date`), label, type, required, choices, default, `help_text`. The context also
   includes the business rules, generated from the same constants the code enforces. The form
   the user has open comes first, and the field they last clicked is marked.

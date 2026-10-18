@@ -171,8 +171,20 @@ def test_rate_limit_per_user(librarian_client, admin_client, openrouter):
     assert ask(admin_client).status_code == 200  # other users unaffected
 
 
-def test_widget_is_on_admin_pages_for_staff_only(librarian_client, client):
-    page = librarian_client.get(reverse("admin:index")).content.decode()
-    assert 'id="assistant-root"' in page and "assistant/chat.js" in page
-    assert "<script>" not in page  # no inline scripts (CSP)
-    assert 'id="assistant-root"' not in client.get(reverse("admin:login")).content.decode()
+@pytest.mark.parametrize(
+    "page",
+    [
+        "admin:index",
+        "admin:guide",
+        "admin:library_member_changelist",  # Unfold's list template replaces the footer
+        "admin:library_member_add",  # ...and so does the form template
+    ],
+)
+def test_widget_is_on_every_admin_page_for_staff(librarian_client, page):
+    html = librarian_client.get(reverse(page)).content.decode()
+    assert 'name="assistant-config"' in html and "assistant/chat.js" in html
+    assert "<script>" not in html  # no inline scripts (CSP)
+
+
+def test_widget_is_not_on_the_login_page(client):
+    assert "assistant-config" not in client.get(reverse("admin:login")).content.decode()

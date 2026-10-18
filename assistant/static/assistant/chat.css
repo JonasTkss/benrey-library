@@ -86,3 +86,23 @@
 .assistant-send:disabled { opacity: 0.6; cursor: default; }
 html.dark .assistant-msg--user p { background: var(--color-primary-900); color: var(--color-primary-50); }
 html.dark .assistant-chip { background: var(--color-primary-900); color: var(--color-primary-100); }
+
+.assistant-results {
+  list-style: none;
+  margin: 6px 20px 0 0;
+  padding: 0;
+  border: 1px solid var(--lib-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.assistant-results li {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 10px;
+  border-top: 1px solid var(--lib-border);
+}
+.assistant-results li:first-child { border-top: 0; }
+.assistant-result-label { font-weight: 600; color: var(--color-primary-700); }
+a.assistant-result-label:hover { text-decoration: underline; }
+html.dark .assistant-result-label { color: var(--color-primary-300); }
+.assistant-result-detail { font-size: 11px; color: var(--lib-muted); }

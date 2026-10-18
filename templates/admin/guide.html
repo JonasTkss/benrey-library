@@ -68,8 +68,9 @@
 
     <section id="members" class="guide-step">
       <h2><span class="material-symbols-outlined">person_add</span>Register or find a member</h2>
-      <p><a href="{% url 'admin:library_member_add' %}">Add member</a>: full name and email are enough. Emails are unique, ignoring capitals,
-        so the form warns you if the person is already registered. The member page shows all their loans, open ones first.</p>
+      <p><a href="{% url 'admin:library_member_add' %}">Add member</a>: full name and email are enough. A <strong>card number</strong> (like LIB-40217735) is assigned on save; write it on the member's card.
+        Emails are unique, ignoring capitals, so the form warns you if the person is already registered.
+        At the desk, search Members or Loans by card number, name or email. The member page shows the card number, fees due and all loans, open ones first.</p>
     </section>
 
     <section id="overdue" class="guide-step">
@@ -79,6 +80,7 @@
         <li><a href="{% url 'admin:library_member_changelist' %}?overdue=yes">Members with overdue loans</a> is the list to call.</li>
         <li><a href="{% url 'admin:library_loan_changelist' %}?due=soon">Due in the next 3 days</a> is good for friendly reminders.</li>
         <li>The late fee is €{{ late_fee }} per day, shown on each loan. Nobody has to mark a loan as overdue: it happens automatically.</li>
+        <li>The <strong>Fees due</strong> column in <a href="{% url 'admin:library_member_changelist' %}?overdue=yes">Members</a> adds up what each member owes today on books they still have; click the <em>Fees due</em> header (twice) to put the highest bill first, or just ask the assistant <em>"Who has the highest bill?"</em>.</li>
       </ul>
     </section>
 
@@ -121,10 +123,15 @@
 
     <section id="help" class="guide-step">
       <h2><span class="material-symbols-outlined">help</span>Ask the help assistant</h2>
-      <p>Press <kbd>? Help</kbd> in the bottom-right corner of any page and ask about a field, for example
-        <em>"What does due date mean?"</em> or <em>"How many books can a member borrow?"</em>.
-        Click into a field first and the assistant knows which one you mean. Answers come only from this system's own field descriptions and rules,
-        and show which fields they are based on. If the AI service is down you still get the built-in field help.</p>
+      <p>Press <kbd>? Help</kbd> in the bottom-right corner of any page. You can ask two kinds of question:</p>
+      <ul>
+        <li><strong>About a form:</strong> <em>"What does due date mean?"</em>, <em>"How many books can a member borrow?"</em>.
+          Click into a field first and the assistant knows which one you mean. Answers come from this system's own field descriptions and rules, and show which fields they are based on.</li>
+        <li><strong>About the library right now:</strong> <em>"Who has the highest bill?"</em>, <em>"Is Dune on the shelf?"</em>,
+          <em>"Find member Anna"</em>, <em>"How many books are overdue?"</em>. The answer comes straight from the database with links to the member, loan or book,
+          and only shows what your role may see.</li>
+      </ul>
+      <p class="guide-tip">The AI only decides which question you asked; it never sees member names, emails or fees. If the AI service is down, simple questions still work and field help is shown instead.</p>
     </section>
 
     <section id="rules" class="guide-step">

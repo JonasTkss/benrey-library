@@ -158,5 +158,21 @@ def parse_reply(content: str, known_ids: set[str]) -> tuple[str, list[str]]:
     return answer[:MAX_ANSWER_CHARS], list(dict.fromkeys(sources))
 
 
+def parse_lookup(content: str) -> tuple[str, dict] | None:
+    """If the model asked for a data lookup ({"lookup": name, "params": {...}}),
+    return (name, params). The name is checked against the allow-list later."""
+    match = re.search(r"\{.*\}", content, re.DOTALL)
+    if not match:
+        return None
+    try:
+        data = json.loads(match.group(0))
+    except ValueError:
+        return None
+    if not isinstance(data, dict) or not isinstance(data.get("lookup"), str):
+        return None
+    params = data.get("params")
+    return data["lookup"], params if isinstance(params, dict) else {}
+
+
 # The value of "answer" up to its closing quote, or to the end if it was cut off.
 PARTIAL_ANSWER = re.compile(r'"answer"\s*:\s*"((?:[^"\\]|\\.)*)', re.DOTALL)

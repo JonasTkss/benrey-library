@@ -15,15 +15,16 @@
 <link rel="stylesheet" href="{% static 'library/admin.css' %}">
 {% endblock %}
 
-{% block footer %}
+{% block extrahead %}
 {{ block.super }}
 {% if user.is_active and user.is_staff %}
-  {# The help widget. All behaviour is in a static file: the CSP forbids inline scripts. #}
+  {# The help widget. Injected in <head> because Unfold's list and form pages #}
+  {# replace the footer block. Behaviour is in a static file: the CSP forbids inline scripts. #}
   <link rel="stylesheet" href="{% static 'assistant/chat.css' %}">
-  <div id="assistant-root"
-       data-endpoint="{% url 'assistant:ask' %}"
-       data-csrf="{{ csrf_token }}"
-       data-admin-root="{% url 'admin:index' %}"></div>
+  <meta name="assistant-config"
+        data-endpoint="{% url 'assistant:ask' %}"
+        data-csrf="{{ csrf_token }}"
+        data-admin-root="{% url 'admin:index' %}">
   <script src="{% static 'assistant/chat.js' %}" defer></script>
 {% endif %}
 {% endblock %}

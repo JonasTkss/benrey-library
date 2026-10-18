@@ -4,12 +4,15 @@
 (function () {
   "use strict";
 
-  const root = document.getElementById("assistant-root");
-  if (!root) return;
+  const config = document.querySelector('meta[name="assistant-config"]');
+  if (!config) return;
 
-  const endpoint = root.dataset.endpoint;
-  const csrf = root.dataset.csrf;
-  const adminRoot = root.dataset.adminRoot;
+  const endpoint = config.dataset.endpoint;
+  const csrf = config.dataset.csrf;
+  const adminRoot = config.dataset.adminRoot;
+  const root = document.createElement("div");
+  root.id = "assistant-root";
+  document.body.appendChild(root);
   let lastField = null;
 
   // Which model's form is open, from a URL like /<admin>/library/loan/12/change/.
@@ -44,10 +47,10 @@
   const panel = el("section", "assistant-panel");
   panel.id = "assistant-panel";
   panel.hidden = true;
-  panel.setAttribute("aria-label", "Form help assistant");
+  panel.setAttribute("aria-label", "Library help assistant");
 
   const header = el("div", "assistant-header");
-  header.appendChild(el("strong", "", "Form help"));
+  header.appendChild(el("strong", "", "Library help"));
   const close = el("button", "assistant-close", "×");
   close.type = "button";
   close.setAttribute("aria-label", "Close help");
@@ -56,14 +59,14 @@
   const log = el("div", "assistant-log");
   log.setAttribute("aria-live", "polite");
   log.appendChild(
-    el("p", "assistant-hint", "Ask what a field means or how to fill it in. Answers use this form's field definitions.")
+    el("p", "assistant-hint", "Ask what a field means, or about the library: \u201cWho has the highest bill?\u201d, \u201cIs Dune on the shelf?\u201d, \u201cFind member Anna\u201d.")
   );
 
   const form = el("form", "assistant-form");
   const input = el("textarea");
   input.rows = 2;
   input.maxLength = 500;
-  input.placeholder = "e.g. What is the due date for?";
+  input.placeholder = "e.g. Who has the highest bill?";
   input.setAttribute("aria-label", "Your question");
   const send = el("button", "assistant-send", "Ask");
   send.type = "submit";
@@ -96,9 +99,26 @@
     return box;
   }
 
+  // Lookup results: rows with a link into the admin. URLs come from the
+  // server, but only same-site paths under the admin are turned into links.
+  function resultsBlock(data) {
+    const list = el("ul", "assistant-results");
+    (data.results || []).forEach(function (row) {
+      const item = el("li");
+      const safe = typeof row.url === "string" && row.url.startsWith(adminRoot);
+      const link = el(safe ? "a" : "span", "assistant-result-label", row.label);
+      if (safe) link.href = row.url;
+      item.append(link, el("span", "assistant-result-detail", row.detail));
+      list.appendChild(item);
+    });
+    return list;
+  }
+
   function sourcesBlock(data) {
     const wrap = el("div", "assistant-meta");
-    if (data.sources && data.sources.length) {
+    if (data.lookup) {
+      wrap.appendChild(el("span", "", "From the live library data."));
+    } else if (data.sources && data.sources.length) {
       wrap.appendChild(el("span", "", "Based on: "));
       data.sources.forEach(function (source) {
         wrap.appendChild(el("span", "assistant-chip", source.label));
@@ -106,7 +126,7 @@
     } else {
       wrap.appendChild(el("span", "assistant-warn", "Not grounded in a field definition; double-check with an administrator."));
     }
-    if (data.degraded) {
+    if (data.degraded && !data.lookup) {  // a database answer is complete even without AI
       wrap.appendChild(el("span", "assistant-warn", data.disabled ? " Assistant is not configured." : " AI unavailable: showing built-in help."));
     }
     return wrap;
@@ -133,7 +153,10 @@
       if (!response.ok) {
         addMessage("bot", data.error || "Sorry, something went wrong. Please try again.");
       } else {
-        addMessage("bot", data.answer, sourcesBlock(data));
+        const extra = el("div");
+        if (data.results && data.results.length) extra.appendChild(resultsBlock(data));
+        extra.appendChild(sourcesBlock(data));
+        addMessage("bot", data.answer, extra);
       }
     } catch (err) {
       pending.remove();
