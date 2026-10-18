@@ -286,3 +286,11 @@ kbd {
 .confirm-actions { display: flex; gap: 8px; margin-top: 16px; }
 .dash-btn--danger { background: #b91c1c; border-color: #b91c1c; color: #fff; }
 .dash-btn--danger:hover { background: #991b1b; }
+
+/* --- Ask AI tutorial bits (chips themselves are styled in chat.css) -------- */
+.guide-sub { margin: 16px 0 4px; font-size: 14px; font-weight: 600; }
+.guide-step .ask-chips { margin-top: 8px; }
+.guide-step--ai { border-left: 3px solid var(--color-primary-500); }
+.panel--ai .panel-head h2 { display: flex; align-items: center; gap: 6px; }
+.panel--ai .panel-head .material-symbols-outlined { color: var(--color-primary-600); font-size: 20px; }
+.panel--ai .ask-chips { margin-top: 10px; }

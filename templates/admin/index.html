@@ -130,6 +130,20 @@
   </section>
   {% endif %}
 
+  <section class="panel panel--ai">
+    <header class="panel-head">
+      <h2><span class="material-symbols-outlined">auto_awesome</span> Ask AI</h2>
+      <a href="{% url 'admin:guide' %}#help">2-minute tutorial →</a>
+    </header>
+    <p class="panel-meta">Ask about a form field, the live library data or statistics. Try one:</p>
+    <div class="ask-chips">
+      <button type="button" class="ask-chip" data-ask="Who has the highest bill?">Who has the highest bill?</button>
+      <button type="button" class="ask-chip" data-ask="Give me some library statistics">Library statistics</button>
+      <button type="button" class="ask-chip" data-ask="Most borrowed books">Most borrowed books</button>
+      <button type="button" class="ask-chip" data-ask="How long do people keep books on average this month?">Average loan length this month</button>
+    </div>
+  </section>
+
   {% if not loan_stats and not book_stats %}
     <div class="panel"><p class="panel-empty">Your account has no role yet. Ask an administrator to assign one.</p></div>
   {% endif %}

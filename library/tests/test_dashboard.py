@@ -95,3 +95,11 @@ def test_dashboard_figures_are_cached_briefly(librarian_client):
         response = librarian_client.get(reverse("admin:index"))
     assert len(second.captured_queries) < len(first.captured_queries)
     assert response.context["loan_stats"]["on_loan"] == 1
+
+
+def test_ask_ai_tutorial_buttons_on_guide_and_dashboard(librarian_client):
+    guide = librarian_client.get(reverse("admin:guide")).content.decode()
+    dashboard = librarian_client.get(reverse("admin:index")).content.decode()
+    assert 'data-ask="Who has the highest bill?"' in guide
+    assert 'data-ask="What about overdue loans?"' in guide  # follow-up step
+    assert "data-ask=" in dashboard and "2-minute tutorial" in dashboard

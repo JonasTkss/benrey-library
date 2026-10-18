@@ -15,7 +15,7 @@
       {% if is_admin_role %}<li><a href="#catalogue">Manage the catalogue</a></li>{% endif %}
       {% if can_change_status %}<li><a href="#suspend">Suspend a member</a></li>{% endif %}
       {% if can_manage_users %}<li><a href="#staff">Staff accounts and roles</a></li>{% endif %}
-      <li><a href="#help">Ask AI</a></li>
+      <li><a href="#help">Ask AI tutorial</a></li>
       <li><a href="#rules">Rules at a glance</a></li>
     </ol>
   </aside>
@@ -123,22 +123,50 @@
     </section>
     {% endif %}
 
-    <section id="help" class="guide-step">
-      <h2><span class="material-symbols-outlined">auto_awesome</span>Ask AI</h2>
-      <p>Press <kbd>Ask AI</kbd> in the bottom-right corner of any page. You can ask two kinds of question:</p>
+    <section id="help" class="guide-step guide-step--ai">
+      <h2><span class="material-symbols-outlined">auto_awesome</span>Ask AI: a 2-minute tutorial</h2>
+      <p>The <kbd>Ask AI</kbd> button sits in the bottom-right corner of every page. Every button below really asks the question, so you can follow along.</p>
+
+      <h3 class="guide-sub">1. Ask what a field means</h3>
+      <p>Click into a form field, then ask. The answer is based on this system's own field descriptions and shows which fields it used.</p>
+      <div class="ask-chips">
+        <button type="button" class="ask-chip" data-ask="What does due date mean?">What does due date mean?</button>
+        <button type="button" class="ask-chip" data-ask="How many books can a member borrow?">How many books can a member borrow?</button>
+        <button type="button" class="ask-chip" data-ask="How do I fill in the ISBN?">How do I fill in the ISBN?</button>
+      </div>
+
+      <h3 class="guide-sub">2. Ask about the library right now</h3>
+      <p>Answers come straight from the database, with links to the member, loan or book. You only ever see what your role may see.</p>
+      <div class="ask-chips">
+        <button type="button" class="ask-chip" data-ask="Who has the highest bill?">Who has the highest bill?</button>
+        <button type="button" class="ask-chip" data-ask="Who has the most books on loan?">Who has the most books on loan?</button>
+        <button type="button" class="ask-chip" data-ask="Which author has the most books?">Which author has the most books?</button>
+        <button type="button" class="ask-chip" data-ask="Most borrowed books">Most borrowed books</button>
+      </div>
+      <p class="guide-tip">You can also name someone or something: <em>"Find member Anna"</em>, <em>"What does Anna have on loan?"</em>, <em>"Is Dune on the shelf?"</em>, or use a card number like <em>LIB-12345678</em>.</p>
+
+      <h3 class="guide-sub">3. Get statistics</h3>
+      <div class="ask-chips">
+        <button type="button" class="ask-chip" data-ask="Give me some library statistics">Give me some library statistics</button>
+        <button type="button" class="ask-chip" data-ask="How much is due in late fees in total?">How much is due in late fees in total?</button>
+        <button type="button" class="ask-chip" data-ask="How long do people keep books on average this month?">Average loan length this month</button>
+        <button type="button" class="ask-chip" data-ask="Which genre is most popular this year?">Most popular genre this year</button>
+      </div>
+
+      <h3 class="guide-sub">4. Ask follow-ups</h3>
+      <p>The assistant remembers the last few questions. Try the fees question above, then:</p>
+      <div class="ask-chips">
+        <button type="button" class="ask-chip" data-ask="What about overdue loans?">What about overdue loans?</button>
+        <button type="button" class="ask-chip" data-ask="And this month?">And this month?</button>
+      </div>
+
+      <h3 class="guide-sub">Good to know</h3>
       <ul>
-        <li><strong>About a form:</strong> <em>"What does due date mean?"</em>, <em>"How many books can a member borrow?"</em>.
-          Click into a field first and the assistant knows which one you mean. Answers come from this system's own field descriptions and rules, and show which fields they are based on.</li>
-        <li><strong>About the library right now:</strong> <em>"Who has the highest bill?"</em>, <em>"Is Dune on the shelf?"</em>,
-          <em>"Find member Anna"</em>, <em>"What does Anna have on loan?"</em>, <em>"Which author has the most books?"</em>,
-          <em>"Who has the most books on loan?"</em>, <em>"Most borrowed books"</em>, <em>"How many books are overdue?"</em>.</li>
-        <li><strong>Statistics:</strong> <em>"How much is due in late fees in total?"</em>, <em>"How long do people keep books on average this month?"</em>,
-          <em>"Which genre is most popular this year?"</em>, <em>"Give me some library statistics"</em>.
-          Follow-ups work too: after asking about fees, <em>"what about overdue loans?"</em> or <em>"and last month?"</em>. The answer comes straight from the database with links to the member, loan or book,
-          and only shows what your role may see.</li>
+        <li>The AI only decides <em>which</em> question you asked. It never sees member names, emails or fees; the numbers come from the database.</li>
+        <li>The conversation follows you from page to page, even if you leave before the answer arrives, until you log out. <em>Clear</em> starts a new one.</li>
+        <li>If the AI service is down, common questions still work and field help is shown instead.</li>
+        <li>It cannot change anything: lending, returns and suspensions are always done in the admin itself.</li>
       </ul>
-      <p class="guide-tip">The AI only decides which question you asked; it never sees member names, emails or fees. If the AI service is down, simple questions still work and field help is shown instead.
-        The conversation follows you from page to page (even if you leave before the answer arrives) until you log out; <em>Clear</em> starts a new one.</p>
     </section>
 
     <section id="rules" class="guide-step">

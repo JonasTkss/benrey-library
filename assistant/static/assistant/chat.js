@@ -93,10 +93,28 @@
 
   const log = el("div", "assistant-log");
   log.setAttribute("aria-live", "polite");
+  // Empty conversation = a short tutorial with questions to click.
+  const EXAMPLES = [
+    ["About this form", ["What does due date mean?", "How do I fill in the ISBN?"]],
+    ["Live library data", ["Who has the highest bill?", "Who has the most books on loan?", "Most borrowed books"]],
+    ["Statistics", ["Give me some library statistics", "How long do people keep books this month?"]],
+  ];
   function showHint() {
-    log.replaceChildren(
-      el("p", "assistant-hint", "Ask what a field means, or about the library: \u201cWho has the highest bill?\u201d, \u201cIs Dune on the shelf?\u201d, \u201cFind member Anna\u201d.")
-    );
+    const intro = el("div", "assistant-intro");
+    intro.appendChild(el("p", "assistant-hint", "Ask in plain words. Answers about the library come straight from the database, with links."));
+    EXAMPLES.forEach(function (group) {
+      intro.appendChild(el("p", "assistant-group", group[0]));
+      const chips = el("div", "assistant-chips");
+      group[1].forEach(function (question) {
+        const chip = el("button", "ask-chip", question);
+        chip.type = "button";
+        chip.dataset.ask = question;
+        chips.appendChild(chip);
+      });
+      intro.appendChild(chips);
+    });
+    intro.appendChild(el("p", "assistant-tip", "Tip: click into a form field first, then ask \u201cwhat is this?\u201d. Follow-ups like \u201cand last month?\u201d work too."));
+    log.replaceChildren(intro);
   }
   showHint();
 
@@ -113,7 +131,10 @@
   panel.append(header, log, form);
   root.append(toggle, panel);
 
+  let hideFirstVisitTip = function () {};
+
   function setOpen(open, focus) {
+    if (open) hideFirstVisitTip();
     panel.hidden = !open;
     toggle.setAttribute("aria-expanded", String(open));
     store(OPEN_KEY, open);
@@ -267,6 +288,35 @@
     }
   }
 
+  // Any element with data-ask (here, in the guide or on the dashboard) opens
+  // the panel and asks its question: the tutorials are clickable.
+  document.addEventListener("click", function (event) {
+    const trigger = event.target.closest && event.target.closest("[data-ask]");
+    if (!trigger || send.disabled) return;
+    event.preventDefault();
+    setOpen(true, false);
+    ask(trigger.dataset.ask);
+  });
+
+  // One-time pointer for first-time users; remembered in this browser only.
+  function showFirstVisitTip() {
+    let seen = false;
+    try { seen = localStorage.getItem("assistant.tipSeen") === "1"; } catch (e) { seen = true; }
+    if (seen) return;
+    const tip = el("div", "assistant-first-tip");
+    tip.appendChild(el("span", "", "New: ask about fees, loans and statistics."));
+    const dismiss = el("button", "assistant-first-tip-close", "\u00d7");
+    dismiss.type = "button";
+    dismiss.setAttribute("aria-label", "Dismiss tip");
+    tip.appendChild(dismiss);
+    root.appendChild(tip);
+    hideFirstVisitTip = function () {
+      tip.remove();
+      try { localStorage.setItem("assistant.tipSeen", "1"); } catch (e) { /* ignore */ }
+    };
+    dismiss.addEventListener("click", hideFirstVisitTip);
+  }
+
   form.addEventListener("submit", function (event) {
     event.preventDefault();
     const question = input.value.trim();
@@ -289,6 +339,7 @@
     let messages = [];
     try { messages = await fetchHistory(); renderHistory(messages); } catch (e) { /* show the hint */ }
     if (load(OPEN_KEY) || load(PENDING_KEY)) setOpen(true, false);
+    else showFirstVisitTip();
     resumePending(messages);
   })();
 })();
