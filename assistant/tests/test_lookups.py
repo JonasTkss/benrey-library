@@ -189,3 +189,88 @@ def test_ai_down_still_answers_data_question_from_keywords(librarian_client, ope
     assert data["degraded"] is True
     assert data["lookup"] == "top_fees"
     assert "Late Larry" in data["answer"]
+
+
+# --- lookups added after "as a librarian it won't give anything" ---------------
+
+
+def test_top_authors(admin_user):
+    from library.tests.factories import AuthorFactory
+
+    prolific, other = AuthorFactory(name="Prolific Pen"), AuthorFactory(name="One Book")
+    for _ in range(3):
+        BookFactory(authors=[prolific])
+    BookFactory(authors=[other])
+    result = lookups.run(admin_user, "top_authors", {})
+    assert result.summary == "Prolific Pen has the most books in the catalogue: 3."
+    assert result.rows[0].url == reverse("admin:library_author_change", args=[prolific.pk])
+
+
+def test_author_books(admin_user):
+    from library.tests.factories import AuthorFactory
+
+    author = AuthorFactory(name="Ursula Example")
+    BookFactory(title="Earthsea Example", authors=[author])
+    result = lookups.run(admin_user, "author_books", {"query": "ursula"})
+    assert result.summary == "Ursula Example has 1 book(s) in the catalogue."
+    assert result.rows[0].label == "Earthsea Example"
+
+
+def test_top_borrowers_and_most_loans_ever(admin_user):
+    busy, quiet = MemberFactory(full_name="Busy Reader"), MemberFactory(full_name="Quiet")
+    for _ in range(3):
+        LoanFactory(member=busy)
+    LoanFactory(member=quiet)
+    LoanFactory(member=quiet, status="returned", returned_at=timezone.now())
+    LoanFactory(member=quiet, status="returned", returned_at=timezone.now())
+    now = lookups.run(admin_user, "top_borrowers", {})
+    assert now.summary == "Busy Reader has the most books on loan right now: 3."
+    ever = lookups.run(admin_user, "most_loans_ever", {})
+    assert ever.summary.startswith("Busy Reader") or ever.summary.startswith("Quiet")
+    assert {r.label for r in ever.rows} == {"Busy Reader", "Quiet"}
+
+
+def test_popular_books(admin_user):
+    hit = BookFactory(title="Bestseller", copies_total=5)
+    for _ in range(3):
+        LoanFactory(book=hit)
+    LoanFactory(book=BookFactory(title="Niche"))
+    result = lookups.run(admin_user, "popular_books", {})
+    assert result.summary == "“Bestseller” is the most borrowed book: lent 3 times."
+
+
+def test_member_loans(admin_user):
+    member = MemberFactory(full_name="Anna Loans")
+    LoanFactory(member=member, book=BookFactory(title="First Book"))
+    result = lookups.run(admin_user, "member_loans", {"query": member.card_number})
+    assert result.summary == "Anna Loans has 1 book(s) on loan:"
+    assert result.rows[0].label == "First Book"
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        ("which author has the most book", "top_authors"),  # asked in the live demo
+        ("who has the highest loan", "top_borrowers"),  # asked in the live demo
+        ("who has the most books borrowed", "popular_books"),
+        ("show the most popular books", "popular_books"),
+    ],
+)
+def test_keyword_router_new_questions(question, expected):
+    assert lookups.guess(question) == expected
+
+
+def test_librarian_gets_the_new_lookups(librarian):
+    names = {lk.name for lk in lookups.allowed_lookups(librarian)}
+    assert {"top_authors", "top_borrowers", "popular_books", "member_loans"} <= names
+
+
+def test_author_books_reports_the_real_total(admin_user):
+    from library.tests.factories import AuthorFactory
+
+    author = AuthorFactory(name="Very Prolific")
+    for _ in range(lookups.MAX_LIMIT + 2):
+        BookFactory(authors=[author])
+    result = lookups.run(admin_user, "author_books", {"query": "very prolific"})
+    assert result.summary.startswith(f"Very Prolific has {lookups.MAX_LIMIT + 2} book(s)")
+    assert result.rows[-1].label == "All books by Very Prolific"

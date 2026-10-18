@@ -15,11 +15,11 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import timedelta
 
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.urls import reverse
 from django.utils import timezone
 
-from library.models import Book, Loan, Member
+from library.models import Author, Book, Loan, Member
 
 DEFAULT_LIMIT, MAX_LIMIT = 5, 10
 MIN_QUERY, MAX_QUERY = 2, 100
@@ -141,6 +141,137 @@ def book_availability(query):
     return LookupResult(summary, rows)
 
 
+def _book_row(book):
+    state = (
+        "withdrawn"
+        if book.is_withdrawn
+        else f"{book.copies_available} of {book.copies_total} on the shelf"
+    )
+    return Row(book.title, state, reverse("admin:library_book_change", args=[book.pk]))
+
+
+def top_authors(limit=DEFAULT_LIMIT):
+    authors = list(
+        Author.objects.annotate(n=Count("books")).filter(n__gt=0).order_by("-n", "name")[:limit]
+    )
+    if not authors:
+        return LookupResult("There are no books in the catalogue yet.")
+    top = authors[0]
+    return LookupResult(
+        f"{top.name} has the most books in the catalogue: {top.n}.",
+        [
+            Row(a.name, f"{a.n} book(s)", reverse("admin:library_author_change", args=[a.pk]))
+            for a in authors
+        ],
+    )
+
+
+def author_books(query):
+    authors = list(Author.objects.filter(name__icontains=query).order_by("name")[:MAX_LIMIT])
+    if not authors:
+        return LookupResult(f"No author matches “{query}”.")
+    if len(authors) > 1:
+        return LookupResult(
+            f"{len(authors)} authors match “{query}”. Which one?",
+            [
+                Row(a.name, "author", reverse("admin:library_author_change", args=[a.pk]))
+                for a in authors
+            ],
+        )
+    author = authors[0]
+    all_books = Book.objects.with_availability().filter(authors=author).order_by("title")
+    total = all_books.count()
+    books = list(all_books[:MAX_LIMIT])
+    summary = f"{author.name} has {total} book(s) in the catalogue."
+    if total > len(books):
+        summary += f" The first {len(books)} are below; the author page lists them all."
+    rows = [_book_row(b) for b in books]
+    if total > len(books):
+        author_url = reverse("admin:library_author_change", args=[author.pk])
+        rows.append(Row(f"All books by {author.name}", "author page", author_url))
+    return LookupResult(summary, rows)
+
+
+def top_borrowers(limit=DEFAULT_LIMIT):
+    members = list(
+        Member.objects.with_loan_counts()
+        .filter(annotated_active_loans__gt=0)
+        .order_by("-annotated_active_loans", "full_name")[:limit]
+    )
+    if not members:
+        return LookupResult("Nobody has a book on loan right now.")
+    top = members[0]
+    return LookupResult(
+        f"{top.full_name} has the most books on loan right now: {top.active_loan_count}.",
+        [_member_row(m) for m in members],
+    )
+
+
+def most_loans_ever(limit=DEFAULT_LIMIT):
+    members = list(
+        Member.objects.with_loan_counts()
+        .annotate(total_loans=Count("loans", distinct=True))
+        .filter(total_loans__gt=0)
+        .order_by("-total_loans", "full_name")[:limit]
+    )
+    if not members:
+        return LookupResult("No loans have been recorded yet.")
+    rows = []
+    for m in members:
+        row = _member_row(m)
+        row.detail = f"{m.total_loans} loans in total · " + row.detail
+        rows.append(row)
+    top = members[0]
+    return LookupResult(
+        f"{top.full_name} has borrowed the most books overall: {top.total_loans} loans.", rows
+    )
+
+
+def popular_books(limit=DEFAULT_LIMIT):
+    books = list(
+        Book.objects.with_availability()
+        .annotate(times_lent=Count("loans", distinct=True))
+        .filter(times_lent__gt=0)
+        .order_by("-times_lent", "title")[:limit]
+    )
+    if not books:
+        return LookupResult("No book has been lent yet.")
+    rows = []
+    for b in books:
+        row = _book_row(b)
+        row.detail = f"lent {b.times_lent} times · " + row.detail
+        rows.append(row)
+    return LookupResult(
+        f"“{books[0].title}” is the most borrowed book: lent {books[0].times_lent} times.", rows
+    )
+
+
+def member_loans(query):
+    members = list(
+        Member.objects.filter(
+            Q(card_number__iexact=query) | Q(email__iexact=query) | Q(full_name__icontains=query)
+        ).order_by("full_name")[:2]
+    )
+    if not members:
+        return LookupResult(f"No member matches “{query}”.")
+    if len(members) > 1:
+        return find_member(query)  # ambiguous: list the matches instead
+    member = members[0]
+    loans = list(member.loans.active().select_related("book").order_by("due_date"))
+    if not loans:
+        return LookupResult(f"{member.full_name} has no books on loan.")
+    rows = [
+        Row(
+            loan.book.title,
+            f"due {loan.due_date:%d %b}"
+            + (f" · {loan.days_overdue()} days late" if loan.is_overdue else ""),
+            reverse("admin:library_loan_change", args=[loan.pk]),
+        )
+        for loan in loans
+    ]
+    return LookupResult(f"{member.full_name} has {len(loans)} book(s) on loan:", rows)
+
+
 def circulation_summary():
     today = timezone.localdate()
     active = Loan.objects.active()
@@ -199,6 +330,48 @@ LOOKUPS = {
             book_availability,
         ),
         Lookup(
+            "member_loans",
+            "Which books a specific member has on loan right now, with due dates.",
+            {"query": "the member's name, email or card number (required)"},
+            "library.view_loan",
+            member_loans,
+        ),
+        Lookup(
+            "top_borrowers",
+            "Members with the most books on loan right now.",
+            {"limit": f"how many members to list, 1-{MAX_LIMIT} (default {DEFAULT_LIMIT})"},
+            "library.view_member",
+            top_borrowers,
+        ),
+        Lookup(
+            "most_loans_ever",
+            "Members who have borrowed the most books in total (all time).",
+            {"limit": f"how many members to list, 1-{MAX_LIMIT} (default {DEFAULT_LIMIT})"},
+            "library.view_member",
+            most_loans_ever,
+        ),
+        Lookup(
+            "popular_books",
+            "The most borrowed books (all time).",
+            {"limit": f"how many books to list, 1-{MAX_LIMIT} (default {DEFAULT_LIMIT})"},
+            "library.view_book",
+            popular_books,
+        ),
+        Lookup(
+            "top_authors",
+            "Authors with the most books in the catalogue.",
+            {"limit": f"how many authors to list, 1-{MAX_LIMIT} (default {DEFAULT_LIMIT})"},
+            "library.view_author",
+            top_authors,
+        ),
+        Lookup(
+            "author_books",
+            "The books by a specific author, with availability.",
+            {"query": "the author's name (required)"},
+            "library.view_book",
+            author_books,
+        ),
+        Lookup(
             "circulation_summary",
             "Today's totals: books on loan, overdue, due soon, lent and returned today.",
             {},
@@ -246,18 +419,25 @@ def run(user, name, params) -> LookupResult:
 # Keyword routing for when the AI is unavailable. Deliberately narrow: only
 # clear "who/which/how many" data questions; everything else gets field help.
 ASKING = {"who", "which", "whose", "list", "show", "top", "highest", "most", "biggest", "many"}
-ROUTES = [
-    ("top_fees", {"fee", "fees", "bill", "bills", "owe", "owes", "owing", "debt", "pay"}),
-    ("overdue_loans", {"overdue", "late"}),
-    ("circulation_summary", {"today", "summary", "totals", "loan", "loans"}),
-]
+RANKING = {"most", "highest", "top", "biggest", "largest"}
+FEES = {"fee", "fees", "bill", "bills", "owe", "owes", "owing", "debt", "pay"}
+LOANS = {"loan", "loans", "borrowed", "borrows", "borrowing", "books"}
 
 
 def guess(question: str) -> str | None:
     words = set(re.findall(r"[a-z]+", question.lower()))
     if not words & ASKING:
         return None
-    for name, topic in ROUTES:
-        if words & topic:
-            return name
+    if words & FEES:
+        return "top_fees"
+    if words & {"author", "authors", "writer", "writers", "wrote"} and words & RANKING:
+        return "top_authors"
+    if words & {"overdue", "late"}:
+        return "overdue_loans"
+    if words & {"popular", "read"} or ({"book", "books"} & words and "borrowed" in words):
+        return "popular_books"
+    if words & LOANS and words & RANKING:
+        return "top_borrowers"
+    if words & {"today", "summary", "totals", "loan", "loans"}:
+        return "circulation_summary"
     return None
