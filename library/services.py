@@ -25,6 +25,19 @@ class LoanRuleError(ValidationError):
     forms show it as a normal form error."""
 
 
+def checkout_problems(member: Member, book: Book) -> list[str]:
+    """Lock the book (and member) rows, then list every rule a checkout would
+    break. Must run inside a transaction; the locks are held until it ends.
+
+    The admin calls this from form validation. Django runs each admin
+    add/change view in one transaction, so the rows stay locked from the
+    check until the loan is saved."""
+    book = Book.objects.select_for_update().get(pk=book.pk)
+    if member.pk is not None:
+        member = Member.objects.select_for_update().get(pk=member.pk)
+    return Loan.borrowing_rule_violations(member, book)
+
+
 def checkout_book(
     *,
     member: Member,
@@ -36,9 +49,7 @@ def checkout_book(
     loaned_on = loaned_on or timezone.localdate()
     due_date = due_date or loaned_on + timedelta(days=LOAN_PERIOD_DAYS)
     with transaction.atomic():
-        book = Book.objects.select_for_update().get(pk=book.pk)
-        member = Member.objects.select_for_update().get(pk=member.pk)
-        problems = Loan.borrowing_rule_violations(member, book)
+        problems = checkout_problems(member, book)
         if problems:
             raise LoanRuleError(problems)
         loan = Loan(member=member, book=book, loaned_on=loaned_on, due_date=due_date, notes=notes)

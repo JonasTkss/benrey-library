@@ -143,8 +143,7 @@ class TestLoanClean:
         with pytest.raises(ValidationError, match="cannot be changed"):
             loan.clean()
 
-    def test_new_loan_runs_borrowing_rules(self):
-        member = MemberFactory(status=Member.Status.SUSPENDED)
-        loan = Loan(member=member, book=BookFactory())
-        with pytest.raises(ValidationError, match="suspended"):
+    def test_new_loan_must_start_active(self):
+        loan = Loan(member=MemberFactory(), book=BookFactory(), status=Loan.Status.RETURNED)
+        with pytest.raises(ValidationError, match="starts as"):
             loan.clean()

@@ -1,0 +1,37 @@
+/* Small additions to the stock admin look. Uses the admin's own CSS
+   variables so light and dark themes both work. */
+.cover-thumb {
+  width: 32px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 2px;
+  display: inline-block;
+  vertical-align: middle;
+}
+.cover-thumb--empty {
+  background: var(--darkened-bg);
+  color: var(--body-quiet-color);
+  text-align: center;
+  line-height: 48px;
+}
+.cover-preview {
+  max-width: 200px;
+  max-height: 300px;
+  border-radius: 4px;
+}
+.badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.badge--ok {
+  background: #dff0d8;
+  color: #2d6a2d;
+}
+.badge--bad {
+  background: #f8d7da;
+  color: #8a1f2b;
+}

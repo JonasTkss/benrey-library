@@ -62,3 +62,36 @@ what the alternative was, what breaks at scale.
   "mark returned", one already-returned loan should be reported, not roll back the other 499.
 - **Alternative I skipped:** a state-machine library (django-fsm). Two states and one transition
   do not need a dependency.
+
+## Phase 4: admin customization and roles
+
+- **Who the admin is for:** a front-desk librarian whose day is "find member → see their loans →
+  lend or take back books". So the member page has a "Lend a book" inline (add-only, book
+  autocomplete) and a read-only loan list with open loans first, plus a link to that member's
+  open loans in the Loan list, where the bulk "Mark as returned" / "Extend 7 days" actions live.
+  `library/admin.py`.
+- **Roles are permissions, and the admin enforces them server-side.** Librarian has no delete
+  permission, so `delete_selected` is gone from the action list and the delete URL returns 403
+  (`test_librarian_cannot_delete_by_url`). Only view on Book/Author, so the catalogue renders
+  read-only and a forged POST gets 403. No `auth` permissions, so Users/Groups are not on the
+  index at all. On top of that: `get_list_display` hides stock/record columns from librarians,
+  `get_readonly_fields` locks member `status` without `change_member_status`, and the suspend
+  actions declare `permissions=["change_status"]` so Django hides them.
+- **New loans are validated under row locks inside the admin's own transaction.** Django wraps
+  each add/change view in `transaction.atomic()`. `CheckoutForm.clean()` calls
+  `services.checkout_problems()`, which locks the book and member rows; the locks are held until
+  `save_model` / `save_formset` saves through `services.checkout_book()`. A rule break is a
+  normal form error, never a 500 (`test_rule_violation_is_a_form_error_not_a_crash`).
+- **Existing loans are read-only apart from notes.** State changes only through the actions, so
+  nobody can type `status=returned` without setting `returned_at`, or reopen a returned loan.
+- **500-record bulk update:** select all across pages → action. `apply_to_each` runs each row in
+  its own transaction and reports "N done, M skipped: reasons" (first 10 shown). For 50k rows I
+  would move the action into a background job, because a web request should not run for minutes.
+- **N+1 guarded by tests:** the changelists for Book (prefetch authors, annotate availability),
+  Member (annotated counts) and Loan (`list_select_related`) run the same number of queries for 3
+  rows and 30 rows (`test_changelist_query_count_does_not_grow_with_rows`). Loan list sets
+  `show_full_result_count=False` to skip an extra `COUNT(*)`.
+- **Privilege escalation guard:** non-superuser Admins can manage staff accounts but cannot tick
+  `is_superuser` or grant per-user permissions (`StaffUserAdmin`).
+- **Auth:** Argon2, 12-char validators, 8h DB sessions, session key rotated at login, row deleted
+  at logout, axes locks username+IP after 5 failures for 15 min (HTTP 429). `config/tests/test_auth.py`.

@@ -14,3 +14,7 @@ STORAGES = {
 OPENROUTER_API_KEY = "test-key"
 OPENROUTER_MODELS = ["test/model-a:free", "test/model-b:free"]
 AXES_ENABLED = True
+
+# Keep test output readable: tests deliberately trigger 403s and lockouts.
+LOGGING = LOGGING | {"root": {"handlers": ["console"], "level": "ERROR"}}  # noqa: F405
+LOGGING["loggers"] = {"django.request": {"level": "CRITICAL"}, "axes": {"level": "ERROR"}}

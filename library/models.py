@@ -378,17 +378,18 @@ class Loan(models.Model):
     def borrowing_rule_violations(member: Member, book: Book) -> list[str]:
         """Every reason this member may not borrow this book right now.
 
-        Called by Loan.clean() (friendly form errors) and again by
-        services.checkout_book() while holding row locks (the authoritative
-        check)."""
+        Pure rule check; callers that need it to be race-free use
+        services.checkout_problems(), which takes row locks first."""
         problems = []
         if member.status == Member.Status.SUSPENDED:
             problems.append(f"{member} is suspended and cannot borrow.")
-        active = Loan.objects.filter(member=member, status=Loan.Status.ACTIVE)
-        if active.count() >= settings.MAX_ACTIVE_LOANS:
-            problems.append(f"{member} already has {settings.MAX_ACTIVE_LOANS} books on loan.")
-        if active.filter(book=book).exists():
-            problems.append(f"{member} already has a copy of '{book}'.")
+        # A member being created in the same form has no loans yet.
+        if member.pk is not None:
+            active = Loan.objects.filter(member=member, status=Loan.Status.ACTIVE)
+            if active.count() >= settings.MAX_ACTIVE_LOANS:
+                problems.append(f"{member} already has {settings.MAX_ACTIVE_LOANS} books on loan.")
+            if active.filter(book=book).exists():
+                problems.append(f"{member} already has a copy of '{book}'.")
         if book.is_withdrawn:
             problems.append(f"'{book}' is withdrawn from circulation.")
         on_loan = Loan.objects.filter(book=book, status=Loan.Status.ACTIVE).count()
@@ -401,12 +402,10 @@ class Loan(models.Model):
             raise ValidationError({"due_date": "Due date must be after the loan date."})
 
         if self._state.adding:
+            # Borrowing rules need row locks, so they are checked by
+            # services.checkout_problems(), not here.
             if self.status != self.Status.ACTIVE:
                 raise ValidationError({"status": "A new loan always starts as 'On loan'."})
-            if self.book_id and self.member_id:
-                problems = self.borrowing_rule_violations(self.member, self.book)
-                if problems:
-                    raise ValidationError(problems)
             return
 
         previous = Loan.objects.filter(pk=self.pk).values("status", "book_id", "member_id").first()

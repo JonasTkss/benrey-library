@@ -1,5 +1,6 @@
 import pytest
 from django.contrib.auth.models import Group, User
+from django.test import Client
 
 
 def make_staff(username: str, role: str | None) -> User:
@@ -19,13 +20,18 @@ def librarian(db):
     return make_staff("librarian_role", "Librarian")
 
 
-@pytest.fixture
-def admin_client(client, admin_user):
-    client.force_login(admin_user)
+def logged_in(user) -> Client:
+    # A separate Client per role, so tests can compare two roles side by side.
+    client = Client()
+    client.force_login(user)
     return client
 
 
 @pytest.fixture
-def librarian_client(client, librarian):
-    client.force_login(librarian)
-    return client
+def admin_client(admin_user):
+    return logged_in(admin_user)
+
+
+@pytest.fixture
+def librarian_client(librarian):
+    return logged_in(librarian)
