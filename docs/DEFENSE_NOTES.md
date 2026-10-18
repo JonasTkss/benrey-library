@@ -126,3 +126,39 @@ what the alternative was, what breaks at scale.
   are run through the password validators, and are never printed or committed.
 - `admin_demo` is a member of the **Admin group, not a superuser**, so the demo shows the role
   system, not a superuser bypassing it.
+
+## Phase 7: AI help assistant
+
+- **Grounding (`assistant/context.py`):** the prompt context is generated from the live Django
+  field definitions: id (`loan.due_date`), label, type, required, max length, choices, default
+  and `help_text`. Nothing is copied by hand, so it cannot drift from the schema. The rules text
+  is built from the same constants the services enforce (`MAX_ACTIVE_LOANS`, 14 days, 7 days,
+  fee). A test fails if any editable field has no `help_text`.
+- **Page awareness:** the widget sends the model from the URL and the last focused field. The
+  server accepts them only if they are real ids (allow-list), puts that model first and marks the
+  field "the field the user is looking at". The whole schema is small (~25 fields), so the other
+  models go in too.
+- **The exact prompt:** `SYSTEM_PROMPT` in `assistant/views.py`, plus the generated context.
+  The user's text goes only into the `user` message, never into the system prompt
+  (`test_prompt_injection_stays_in_the_user_message`). Temperature 0.2, max 300 tokens.
+- **What I left out of the context:** row data (member names, emails, loans). The assistant
+  explains forms; it does not need personal data, and sending it to a third-party free model
+  would be a privacy problem.
+- **Anti-hallucination:** the model must return `{"answer", "sources"}`. Any source id that is not
+  a real field is dropped; with no valid source the UI says "not grounded". Invalid JSON →
+  raw text, no sources.
+- **Provider failure (`assistant/client.py`):** ordered chain of free models from
+  `OPENROUTER_MODELS`. 429/5xx → one retry after 0.5s, then next model; timeout, network error,
+  4xx, empty or malformed reply → next model. Connect timeout 3s, read 12s, hard budget 20s
+  overall. If everything fails the endpoint still returns **200** with a deterministic answer
+  built from `help_text` (`degraded: true`), and the widget labels it. No key configured → same
+  fallback, `disabled: true`. The admin itself never depends on the assistant.
+- **Abuse/cost/security:** staff only (403 JSON for anyone else), CSRF required (header from
+  the page; no `csrf_exempt`), JSON only, question 3-500 chars with control characters stripped,
+  10/min and 100/day per user in the shared DB cache (429). Only free models, so the cost risk
+  is the free-tier quota, not money. Replies are inserted with `textContent`, so a reply that
+  contains `<script>` is shown as text. The key stays on the server and is never logged; logs hold
+  model, outcome and latency only.
+- **Known limit:** the DB-cache counter is get-then-set, not atomic, so two simultaneous requests
+  can slip one over the limit. Good enough for a soft limit; Redis `INCR` would fix it.
+- **Skipped on purpose:** chat history (no server storage of questions), streaming, tool calling.

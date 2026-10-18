@@ -1,0 +1,26 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block branding %}
+<div id="site-name"><a href="{% url 'admin:index' %}">{{ site_header|default:_('Django administration') }}</a></div>
+{% if user.is_anonymous %}
+  {% include "admin/color_theme_toggle.html" %}
+{% endif %}
+{% endblock %}
+
+{% block nav-global %}{% endblock %}
+
+{% block footer %}
+{{ block.super }}
+{% if user.is_active and user.is_staff %}
+  {# The help widget. All behaviour is in a static file: the CSP forbids inline scripts. #}
+  <link rel="stylesheet" href="{% static 'assistant/chat.css' %}">
+  <div id="assistant-root"
+       data-endpoint="{% url 'assistant:ask' %}"
+       data-csrf="{{ csrf_token }}"
+       data-admin-root="{% url 'admin:index' %}"></div>
+  <script src="{% static 'assistant/chat.js' %}" defer></script>
+{% endif %}
+{% endblock %}
