@@ -260,18 +260,24 @@ class Command(BaseCommand):
         active_target = int(count * ACTIVE_SHARE)
         loans = []
 
-        # Returned history: any member, any book, spread over two years.
+        # Returned history. Most of it is recent (last ~10 weeks) so that the
+        # daily return rate roughly matches the lending rate, like a library in
+        # steady state; the rest is a thin tail going back two years.
         for _ in range(count - active_target):
-            loaned_on = self.today - timedelta(days=self.rng.randint(20, 730))
+            recent = self.rng.random() < 0.75
+            days_ago = self.rng.randint(2, 75) if recent else self.rng.randint(76, 730)
+            loaned_on = self.today - timedelta(days=days_ago)
             extended = self.rng.random() < 0.1
             due = loaned_on + timedelta(
                 days=LOAN_PERIOD_DAYS + (MAX_EXTENSION_DAYS if extended else 0)
             )
-            # Most come back on time, some late.
+            # Most come back on time, some late; never in the future.
             kept_days = self.rng.choices(
                 [self.rng.randint(3, 14), self.rng.randint(15, 30)], weights=[80, 20]
             )[0]
-            returned_on = min(loaned_on + timedelta(days=kept_days), self.today)
+            if kept_days > days_ago:  # would be in the future: spread it over the past days
+                kept_days = self.rng.randint(1, days_ago)
+            returned_on = loaned_on + timedelta(days=kept_days)
             loans.append(
                 Loan(
                     book=self.rng.choice(books),
