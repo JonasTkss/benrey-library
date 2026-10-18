@@ -1,0 +1,14 @@
+# Railway service config (config as code). Secrets are set as Railway
+# variables, never here.
+[build]
+builder = "RAILPACK"
+buildCommand = "python manage.py collectstatic --noinput"
+
+[deploy]
+# Runs once per deploy, before the new version receives traffic.
+preDeployCommand = ["python manage.py migrate --noinput && python manage.py createcachetable"]
+startCommand = "gunicorn config.wsgi --bind 0.0.0.0:$PORT --workers 2 --timeout 30 --access-logfile -"
+healthcheckPath = "/healthz"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

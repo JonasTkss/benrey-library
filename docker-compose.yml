@@ -1,0 +1,8 @@
+# Local Postgres for development and tests (production uses Supabase).
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: library
+    ports: ["54329:5432"]

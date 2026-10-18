@@ -1,0 +1,32 @@
+[project]
+name = "benrey-library"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["*/migrations/*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "DJ", "S", "BLE", "SIM"]
+ignore = ["S101"]  # assert is fine in tests
+
+[tool.ruff.lint.per-file-ignores]
+"*/tests/*" = ["S105", "S106", "S311"]
+"library/management/commands/seed_demo.py" = ["S311"]  # Faker/random for demo data, not crypto
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+python_files = ["test_*.py"]
+addopts = "-q --strict-markers"
+filterwarnings = ["ignore:No directory at:UserWarning"]
+markers = ["postgres: needs a real PostgreSQL database (row locks)"]
+
+[tool.coverage.run]
+source = ["library", "assistant", "config"]
+omit = ["*/migrations/*", "*/tests/*", "config/wsgi.py", "manage.py"]
+
+[tool.coverage.report]
+skip_empty = true
+show_missing = true
