@@ -41,4 +41,7 @@ SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 CSRF_COOKIE_HTTPONLY = True
 
-AXES_IPWARE_PROXY_COUNT = env.int("AXES_IPWARE_PROXY_COUNT", default=1)
+# Railway's edge puts the visitor's address in X-Real-IP; REMOTE_ADDR is only
+# the internal proxy (100.64.x.x). Without this, the axes lockout would count
+# failures per proxy instead of per attacker.
+TRUST_X_REAL_IP = True

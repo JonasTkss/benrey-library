@@ -132,9 +132,10 @@ AXES_FAILURE_LIMIT = 5
 AXES_COOLOFF_TIME = 0.25  # hours
 AXES_LOCKOUT_PARAMETERS = [["username", "ip_address"]]
 AXES_RESET_ON_SUCCESS = True
-# Railway sits behind a proxy; trust the first X-Forwarded-For hop.
-AXES_IPWARE_PROXY_COUNT = env.int("AXES_IPWARE_PROXY_COUNT", default=0)
-AXES_IPWARE_META_PRECEDENCE_ORDER = ["HTTP_X_FORWARDED_FOR", "REMOTE_ADDR"]
+# Which address counts as "the client" (see config/client_ip.py). Off locally,
+# where there is no proxy; prod.py turns it on behind Railway's edge.
+AXES_CLIENT_IP_CALLABLE = "config.client_ip.client_ip"
+TRUST_X_REAL_IP = False
 
 # --- Security headers shared by all environments ---------------------------
 X_FRAME_OPTIONS = "DENY"
