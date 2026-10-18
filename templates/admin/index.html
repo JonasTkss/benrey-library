@@ -1,0 +1,137 @@
+{% extends "admin/base_site.html" %}
+{% load i18n unfold %}
+{# Dashboard. Each panel is only rendered when the role can use it (see library/dashboard.py). #}
+
+{% block content %}
+<div class="dash">
+  <section class="dash-hello">
+    <div>
+      <p class="dash-eyebrow">{% now "l, j F Y" %}</p>
+      <h1 class="dash-title">Welcome back, {{ user.get_short_name|default:user.username }}</h1>
+      <p class="dash-sub">Signed in as <strong>{{ role_names }}</strong>.
+        New here? Read <a href="{% url 'admin:guide' %}">How to use</a>, or press <kbd>? Help</kbd> on any form.</p>
+    </div>
+    <div class="dash-actions">
+      {% if can_add_loan %}
+        <a class="dash-btn dash-btn--primary" href="{% url 'admin:library_loan_add' %}"><span class="material-symbols-outlined">add_circle</span>Lend a book</a>
+      {% endif %}
+      {% if loan_stats %}
+        <a class="dash-btn" href="{% url 'admin:library_loan_changelist' %}?status__exact=active"><span class="material-symbols-outlined">assignment_return</span>Return books</a>
+      {% endif %}
+      {% if can_add_member %}
+        <a class="dash-btn" href="{% url 'admin:library_member_add' %}"><span class="material-symbols-outlined">person_add</span>New member</a>
+      {% endif %}
+      {% if can_add_book %}
+        <a class="dash-btn" href="{% url 'admin:library_book_add' %}"><span class="material-symbols-outlined">library_add</span>Add a book</a>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="dash-kpis">
+    {% if loan_stats %}
+      <a class="kpi" href="{% url 'admin:library_loan_changelist' %}?status__exact=active">
+        <span class="material-symbols-outlined kpi-icon">swap_horiz</span>
+        <span class="kpi-label">On loan now</span>
+        <span class="kpi-value">{{ loan_stats.on_loan }}</span>
+        <span class="kpi-note">{{ loan_stats.lent_today }} lent and {{ returned_today }} returned today</span>
+      </a>
+      <a class="kpi {% if loan_stats.overdue %}kpi--alert{% endif %}" href="{% url 'admin:library_loan_changelist' %}?due=overdue">
+        <span class="material-symbols-outlined kpi-icon">schedule</span>
+        <span class="kpi-label">Overdue</span>
+        <span class="kpi-value">{{ loan_stats.overdue }}</span>
+        <span class="kpi-note">past their due date, still out</span>
+      </a>
+      <a class="kpi" href="{% url 'admin:library_loan_changelist' %}?due=soon">
+        <span class="material-symbols-outlined kpi-icon">event_upcoming</span>
+        <span class="kpi-label">Due in 3 days</span>
+        <span class="kpi-value">{{ loan_stats.due_soon }}</span>
+        <span class="kpi-note">a good list for reminder calls</span>
+      </a>
+    {% endif %}
+    {% if member_stats %}
+      <a class="kpi" href="{% url 'admin:library_member_changelist' %}">
+        <span class="material-symbols-outlined kpi-icon">group</span>
+        <span class="kpi-label">Active members</span>
+        <span class="kpi-value">{{ member_stats.active }}</span>
+        <span class="kpi-note">{{ member_stats.suspended }} suspended</span>
+      </a>
+    {% endif %}
+    {% if book_stats %}
+      <a class="kpi" href="{% url 'admin:library_book_changelist' %}?availability=available">
+        <span class="material-symbols-outlined kpi-icon">auto_stories</span>
+        <span class="kpi-label">Copies on the shelf</span>
+        <span class="kpi-value">{{ book_stats.on_shelf }}</span>
+        <span class="kpi-note">of {{ book_stats.copies }} copies, {{ book_stats.titles }} titles</span>
+      </a>
+    {% endif %}
+    {% if show_security %}
+      <a class="kpi {% if failed_logins %}kpi--warn{% endif %}" href="{% url 'admin:axes_accessattempt_changelist' %}">
+        <span class="material-symbols-outlined kpi-icon">lock_clock</span>
+        <span class="kpi-label">Failed logins (24 h)</span>
+        <span class="kpi-value">{{ failed_logins }}</span>
+        <span class="kpi-note">5 failures lock a user for 15 min</span>
+      </a>
+    {% endif %}
+  </section>
+
+  {% if loan_stats %}
+  <section class="dash-grid">
+    <div class="panel panel--wide">
+      <header class="panel-head">
+        <h2>Lending activity</h2>
+        <p>Books lent and returned per day, last 14 days</p>
+      </header>
+      <div class="chart-box">{% component "unfold/components/chart/bar.html" with data=activity_chart options=activity_chart_options %}{% endcomponent %}</div>
+    </div>
+
+    <div class="panel">
+      <header class="panel-head">
+        <h2>Needs attention</h2>
+        <a href="{% url 'admin:library_loan_changelist' %}?due=overdue">All overdue →</a>
+      </header>
+      {% if overdue_loans %}
+        <ul class="panel-list">
+          {% for loan in overdue_loans %}
+            <li>
+              <a href="{% url 'admin:library_loan_change' loan.pk %}">
+                <span class="panel-main">{{ loan.book.title }}</span>
+                <span class="panel-meta">{{ loan.member.full_name }}</span>
+              </a>
+              <span class="pill pill--bad">{{ loan.days_overdue }} d late</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="panel-empty">Nothing overdue. Nice.</p>
+      {% endif %}
+    </div>
+
+    <div class="panel">
+      <header class="panel-head">
+        <h2>Due soon</h2>
+        <a href="{% url 'admin:library_loan_changelist' %}?due=soon">See all →</a>
+      </header>
+      {% if due_soon_loans %}
+        <ul class="panel-list">
+          {% for loan in due_soon_loans %}
+            <li>
+              <a href="{% url 'admin:library_loan_change' loan.pk %}">
+                <span class="panel-main">{{ loan.book.title }}</span>
+                <span class="panel-meta">{{ loan.member.full_name }}</span>
+              </a>
+              <span class="pill">{{ loan.due_date|date:"j M" }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="panel-empty">Nothing due in the next three days.</p>
+      {% endif %}
+    </div>
+  </section>
+  {% endif %}
+
+  {% if not loan_stats and not book_stats %}
+    <div class="panel"><p class="panel-empty">Your account has no role yet. Ask an administrator to assign one.</p></div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -31,6 +31,9 @@ if not ADMIN_URL.endswith("/") or ADMIN_URL.startswith("/"):
     raise ImproperlyConfigured("ADMIN_URL must look like 'something/' (no leading slash).")
 
 INSTALLED_APPS = [
+    # Unfold must come before django.contrib.admin: it replaces the admin site
+    # and templates with a modern, sidebar-based theme on top of the same admin.
+    "unfold",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -120,6 +123,11 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
+
+# The admin is the only UI, so a login without ?next= lands on its dashboard
+# (Unfold's login form does not default to it the way Django's does).
+LOGIN_URL = "admin:login"
+LOGIN_REDIRECT_URL = "admin:index"
 
 SESSION_ENGINE = "django.contrib.sessions.backends.db"
 SESSION_COOKIE_AGE = 60 * 60 * 8  # one working day, not Django's 2-week default
@@ -226,7 +234,10 @@ _storage_origin = env("AWS_S3_ENDPOINT_URL", default="").split("/storage/")[0].r
 CONTENT_SECURITY_POLICY = {
     "DIRECTIVES": {
         "default-src": ["'self'"],
-        "script-src": ["'self'"],
+        # 'unsafe-eval' is required by Alpine.js, which the Unfold admin theme
+        # uses to evaluate its x-data attributes. Scripts still load only from
+        # our own origin and no inline <script> is allowed.
+        "script-src": ["'self'", "'unsafe-eval'"],
         "style-src": ["'self'", "'unsafe-inline'"],
         "img-src": ["'self'", "data:"] + ([_storage_origin] if _storage_origin else []),
         "connect-src": ["'self'"],
@@ -236,4 +247,43 @@ CONTENT_SECURITY_POLICY = {
         "form-action": ["'self'"],
         "frame-ancestors": ["'none'"],
     }
+}
+
+# --- Admin theme (django-unfold) ------------------------------------------
+# Sidebar items are filtered per user: an item whose permission callback
+# returns False is not rendered, so each role sees only its own menu.
+UNFOLD = {
+    "SITE_TITLE": "Benrey Library",
+    "SITE_HEADER": "Benrey Library",
+    "SITE_SUBHEADER": "Circulation & catalogue",
+    "SITE_SYMBOL": "local_library",
+    "SITE_URL": "/",
+    "SHOW_VIEW_ON_SITE": False,
+    "SHOW_HISTORY": True,
+    "BORDER_RADIUS": "8px",
+    "COLORS": {
+        # Teal primary, close to a library-green.
+        "primary": {
+            "50": "oklch(98.4% .014 180.72)",
+            "100": "oklch(95.3% .051 180.801)",
+            "200": "oklch(91% .096 180.426)",
+            "300": "oklch(85.5% .138 181.071)",
+            "400": "oklch(77.7% .152 181.912)",
+            "500": "oklch(70.4% .14 182.503)",
+            "600": "oklch(60% .118 184.704)",
+            "700": "oklch(51.1% .096 186.391)",
+            "800": "oklch(43.7% .078 188.216)",
+            "900": "oklch(38.6% .063 188.416)",
+            "950": "oklch(27.7% .046 192.524)",
+        },
+    },
+    "DASHBOARD_CALLBACK": "library.dashboard.dashboard_callback",
+    "SITE_VIEWS": [
+        ("guide/", "guide", "library.dashboard.GuideView"),
+    ],
+    "SIDEBAR": {
+        "show_search": True,
+        "show_all_applications": False,
+        "navigation": "library.dashboard.sidebar_navigation",
+    },
 }

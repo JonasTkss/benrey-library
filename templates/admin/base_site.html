@@ -1,16 +1,19 @@
 {% extends "admin/base.html" %}
 {% load static %}
+{# Same as Unfold's admin/base_site.html, plus the help widget in the footer. #}
 
 {% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
 
 {% block branding %}
-<div id="site-name"><a href="{% url 'admin:index' %}">{{ site_header|default:_('Django administration') }}</a></div>
-{% if user.is_anonymous %}
-  {% include "admin/color_theme_toggle.html" %}
-{% endif %}
+    {% include "unfold/helpers/site_branding.html" %}
 {% endblock %}
 
 {% block nav-global %}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'library/admin.css' %}">
+{% endblock %}
 
 {% block footer %}
 {{ block.super }}

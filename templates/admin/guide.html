@@ -1,0 +1,138 @@
+{% extends "admin/base_site.html" %}
+{# The in-admin manual. Sections for tasks the reader's role cannot do are left out. #}
+
+{% block content %}
+<div class="guide">
+  <aside class="guide-toc">
+    <p class="guide-toc-title">On this page</p>
+    <ol>
+      <li><a href="#start">Getting around</a></li>
+      <li><a href="#lend">Lend a book</a></li>
+      <li><a href="#return">Take books back</a></li>
+      <li><a href="#extend">Extend a loan</a></li>
+      <li><a href="#members">Register or find a member</a></li>
+      <li><a href="#overdue">Chase overdue books</a></li>
+      {% if is_admin_role %}<li><a href="#catalogue">Manage the catalogue</a></li>{% endif %}
+      {% if can_change_status %}<li><a href="#suspend">Suspend a member</a></li>{% endif %}
+      {% if can_manage_users %}<li><a href="#staff">Staff accounts and roles</a></li>{% endif %}
+      <li><a href="#help">Ask the help assistant</a></li>
+      <li><a href="#rules">Rules at a glance</a></li>
+    </ol>
+  </aside>
+
+  <article class="guide-body">
+    <header class="guide-hero">
+      <p class="dash-eyebrow">Staff guide</p>
+      <h1 class="dash-title">How to use Benrey Library</h1>
+      <p class="dash-sub">Everything happens in this admin. This guide covers the tasks your role can do;
+        {% if is_admin_role %}as an <strong>administrator</strong> you can do all of them.
+        {% else %}as a <strong>librarian</strong> you run the front desk: lending, returns, extensions and members. The catalogue is read-only for you.{% endif %}</p>
+    </header>
+
+    <section id="start" class="guide-step">
+      <h2><span class="material-symbols-outlined">explore</span>Getting around</h2>
+      <ul>
+        <li><strong>Sidebar:</strong> Dashboard, Loans, Members, Books and Authors. The red number next to <em>Loans</em> is how many are overdue right now.</li>
+        <li><strong>Search</strong> sits at the top of every list: search loans by book title, member name or email; books by title, ISBN or author.</li>
+        <li><strong>Filters</strong> are behind the <em>Filters</em> button on each list. Combine several, then press <em>Apply</em>.</li>
+        <li><strong>Bulk actions:</strong> tick rows in a list, pick an action from the bar that appears, run it. You can select across pages with "Select all".</li>
+      </ul>
+    </section>
+
+    <section id="lend" class="guide-step">
+      <h2><span class="material-symbols-outlined">add_circle</span>Lend a book</h2>
+      <ol>
+        <li>Open the member (<a href="{% url 'admin:library_member_changelist' %}">Members</a>, search by name or email).</li>
+        <li>In <strong>Lend a book</strong>, start typing the title and pick the book. The due date is filled in ({{ loan_days }} days); change it if needed.</li>
+        <li>Press <strong>Save</strong>. You can lend several books in one go with "Add another".</li>
+      </ol>
+      <p class="guide-tip">Or use <a href="{% url 'admin:library_loan_add' %}">Lend a book</a> on the dashboard and pick both the book and the member.
+        If something is not allowed (no free copy, member suspended, already {{ max_loans }} books out), the form says exactly why and nothing is saved.</p>
+    </section>
+
+    <section id="return" class="guide-step">
+      <h2><span class="material-symbols-outlined">assignment_return</span>Take books back</h2>
+      <ol>
+        <li>On the member's page, click <em>"Open this member's active loans"</em>, or go to <a href="{% url 'admin:library_loan_changelist' %}?status__exact=active">Loans → On loan</a>.</li>
+        <li>Tick the loans being returned.</li>
+        <li>Choose <strong>Mark selected loans as returned</strong> and run it.</li>
+      </ol>
+      <p class="guide-tip">The message at the top says how many were returned and lists any that were skipped (for example, already returned). A returned loan is final and cannot be reopened.</p>
+    </section>
+
+    <section id="extend" class="guide-step">
+      <h2><span class="material-symbols-outlined">more_time</span>Extend a loan</h2>
+      <p>Tick the loan in <a href="{% url 'admin:library_loan_changelist' %}?status__exact=active">Loans</a> and run <strong>Extend due date by {{ extension_days }} days</strong>.
+        A loan can be extended <strong>once</strong>, and not after it is overdue; those are skipped and listed in the message.</p>
+    </section>
+
+    <section id="members" class="guide-step">
+      <h2><span class="material-symbols-outlined">person_add</span>Register or find a member</h2>
+      <p><a href="{% url 'admin:library_member_add' %}">Add member</a>: full name and email are enough. Emails are unique, ignoring capitals,
+        so the form warns you if the person is already registered. The member page shows all their loans, open ones first.</p>
+    </section>
+
+    <section id="overdue" class="guide-step">
+      <h2><span class="material-symbols-outlined">schedule</span>Chase overdue books</h2>
+      <ul>
+        <li><a href="{% url 'admin:library_loan_changelist' %}?due=overdue">Overdue loans</a> lists every book past its due date. Sort by due date to see the oldest first.</li>
+        <li><a href="{% url 'admin:library_member_changelist' %}?overdue=yes">Members with overdue loans</a> is the list to call.</li>
+        <li><a href="{% url 'admin:library_loan_changelist' %}?due=soon">Due in the next 3 days</a> is good for friendly reminders.</li>
+        <li>The late fee is €{{ late_fee }} per day, shown on each loan. Nobody has to mark a loan as overdue: it happens automatically.</li>
+      </ul>
+    </section>
+
+    {% if is_admin_role %}
+    <section id="catalogue" class="guide-step guide-step--admin">
+      <h2><span class="material-symbols-outlined">library_add</span>Manage the catalogue <span class="pill">Admin</span></h2>
+      <ol>
+        <li>Add the author first if they are new (<a href="{% url 'admin:library_author_add' %}">Add author</a>).</li>
+        <li><a href="{% url 'admin:library_book_add' %}">Add book</a>: title, author(s), the 13-digit ISBN (hyphens are fine), genre and number of copies.</li>
+        <li>Optionally upload a cover: JPG, PNG or WebP, up to 2 MB.</li>
+      </ol>
+      <p class="guide-tip">To take a book out of circulation, tick it in Books and run <strong>Withdraw selected books</strong>. Deleting is blocked for books with loan history so history is never lost.</p>
+    </section>
+    {% endif %}
+
+    {% if can_change_status %}
+    <section id="suspend" class="guide-step guide-step--admin">
+      <h2><span class="material-symbols-outlined">block</span>Suspend a member <span class="pill">Admin</span></h2>
+      <p>Tick members in <a href="{% url 'admin:library_member_changelist' %}">Members</a> and run <strong>Suspend selected members</strong>.
+        Suspended members keep their current books but cannot borrow new ones. <strong>Reactivate selected members</strong> undoes it.</p>
+    </section>
+    {% endif %}
+
+    {% if can_manage_users %}
+    <section id="staff" class="guide-step guide-step--admin">
+      <h2><span class="material-symbols-outlined">manage_accounts</span>Staff accounts and roles <span class="pill">Admin</span></h2>
+      <p>Create staff in <a href="{% url 'admin:auth_user_changelist' %}">Staff accounts</a>, tick <em>Staff status</em> and add them to one role:</p>
+      <table class="guide-table">
+        <thead><tr><th></th><th>Admin</th><th>Librarian</th></tr></thead>
+        <tbody>
+          <tr><td>Books & authors</td><td>add, edit, delete</td><td>view only</td></tr>
+          <tr><td>Members</td><td>everything, incl. suspend</td><td>add, edit</td></tr>
+          <tr><td>Loans</td><td>everything</td><td>lend, return, extend</td></tr>
+          <tr><td>Staff, roles, login log</td><td>yes</td><td>not visible</td></tr>
+        </tbody>
+      </table>
+      <p class="guide-tip">After 5 wrong passwords a username is locked for 15 minutes from that address. The <a href="{% url 'admin:axes_accessattempt_changelist' %}">Login attempts</a> page shows them; deleting the entry unlocks it early.</p>
+    </section>
+    {% endif %}
+
+    <section id="help" class="guide-step">
+      <h2><span class="material-symbols-outlined">help</span>Ask the help assistant</h2>
+      <p>Press <kbd>? Help</kbd> in the bottom-right corner of any page and ask about a field, for example
+        <em>"What does due date mean?"</em> or <em>"How many books can a member borrow?"</em>.
+        Click into a field first and the assistant knows which one you mean. Answers come only from this system's own field descriptions and rules,
+        and show which fields they are based on. If the AI service is down you still get the built-in field help.</p>
+    </section>
+
+    <section id="rules" class="guide-step">
+      <h2><span class="material-symbols-outlined">gavel</span>Rules at a glance</h2>
+      <ul class="guide-rules">
+        {% for rule in rules %}<li>{{ rule|slice:"2:" }}</li>{% endfor %}
+      </ul>
+    </section>
+  </article>
+</div>
+{% endblock %}

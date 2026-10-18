@@ -166,3 +166,34 @@ what the alternative was, what breaks at scale.
 - **Known limit:** the DB-cache counter is get-then-set, not atomic, so two simultaneous requests
   can slip one over the limit. Good enough for a soft limit; Redis `INCR` would fix it.
 - **Skipped on purpose:** chat history (no server storage of questions), streaming, tool calling.
+
+## Phase 8: admin UI refresh (dashboard, sidebar, guide)
+
+- **Unfold, not a custom UI.** `django-unfold` re-skins the Django admin (Tailwind, sidebar,
+  command search) but every page is still the admin's own: same ModelAdmins, filters, inlines,
+  actions and permission checks. The rubric's red flag is "hand-building a bespoke admin";
+  this is the opposite. The ModelAdmins now inherit `unfold.admin.ModelAdmin`
+  (`LibraryModelAdmin` in `library/admin.py`); users, roles and the axes log are re-registered
+  so they use the theme too.
+- **Sidebar is permission-filtered** (`library/dashboard.py` `sidebar_navigation`): each item
+  has a permission callback, so a librarian never sees Staff accounts / Roles / Login attempts.
+  The red badge on Loans is the live overdue count.
+- **Dashboard** (`dashboard_callback` + `templates/admin/index.html`): a handful of aggregate
+  queries (one `COUNT ... FILTER` per table, not per row) plus two short lists. Panels are only
+  queried and rendered when the role can use them. The chart is Unfold's Chart.js component fed
+  by a `data-` attribute, so it needs no inline script.
+- **Guide page** (`GuideView`, `templates/admin/guide.html`): a manual inside the admin, at
+  `/<admin>/guide/`. Admin-only sections are left out for librarians; the numbers (loan days,
+  limits, fee) and the rules list come from the same constants the code enforces.
+- **Trade-off: CSP now allows `'unsafe-eval'`.** Alpine.js (used by Unfold) evaluates its
+  `x-data` attributes with `new Function`. Still no inline scripts and only our own origin.
+  Exploiting it would need an HTML-injection bug first, and Django escapes output by default.
+- **Bug found while testing:** Unfold's login form had no default `next`, so logging in from
+  the bare login URL went to `/accounts/profile/` (404). Fixed with `LOGIN_REDIRECT_URL`.
+- **Security bug found in the login log:** every attempt showed `100.64.x.x`, Railway's proxy.
+  The `AXES_IPWARE_*` settings did nothing because the optional `django-ipware` package was
+  not installed. Now `config/client_ip.py` reads Railway's `X-Real-IP`, validates it, and is
+  only trusted in production (otherwise a client could forge it). Tests cover both directions.
+- **Seed data made consistent:** returns used to be spread over two years while open loans were
+  all from the last two weeks, so the chart showed ~70 loans out per day but only ~3 back.
+  Most return history is now from the last ~10 weeks, like a library in steady state.

@@ -12,19 +12,24 @@ Both are checked on the server; nothing is hidden with CSS.
 
 from datetime import timedelta
 
+from axes.admin import AccessAttemptAdmin, AccessFailureLogAdmin, AccessLogAdmin
+from axes.models import AccessAttempt, AccessFailureLog, AccessLog
 from django import forms
 from django.contrib import admin, messages
-from django.contrib.auth.admin import UserAdmin
-from django.contrib.auth.models import User
+from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.models import Group, User
 from django.db.models import Count, Exists, F, OuterRef
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
+from unfold.admin import ModelAdmin, TabularInline
+from unfold.decorators import display
+from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
+from unfold.widgets import UnfoldAdminTextInputWidget
 
 from . import services
 from .models import Author, Book, Loan, Member
-
-ADMIN_CSS = {"all": ("library/admin.css",)}
 
 
 def can_manage_catalogue(request) -> bool:
@@ -51,6 +56,14 @@ def report_bulk_result(modeladmin, request, result, done_verb):
             format_html("{} loan(s) skipped{}:<ul>{}</ul>", len(result.failures), suffix, detail),
             level=messages.WARNING,
         )
+
+
+class LibraryModelAdmin(ModelAdmin):
+    """Shared look for every library model page (Unfold theme)."""
+
+    compressed_fields = True  # label and input side by side on wide screens
+    warn_unsaved_form = True  # ask before leaving a half-filled form
+    list_filter_submit = True  # apply several filters at once
 
 
 # --- Forms -------------------------------------------------------------------
@@ -163,7 +176,7 @@ class LoanDueFilter(admin.SimpleListFilter):
 # --- Inlines -----------------------------------------------------------------
 
 
-class ReadOnlyLoanInline(admin.TabularInline):
+class ReadOnlyLoanInline(TabularInline):
     """Loan history shown inside a book or member page. Never edited here:
     loans change only through the checkout/return/extend services."""
 
@@ -171,6 +184,7 @@ class ReadOnlyLoanInline(admin.TabularInline):
     extra = 0
     can_delete = False
     show_change_link = True
+    show_title = False  # no "Book → Member" caption above every row
     classes = ["collapse"]
     readonly_fields = ["loaned_on", "due_date", "status", "overdue", "late_fee"]
 
@@ -180,9 +194,9 @@ class ReadOnlyLoanInline(admin.TabularInline):
     def has_change_permission(self, request, obj=None):
         return False
 
-    @admin.display(boolean=True)
+    @display(description="overdue", label="danger")
     def overdue(self, loan):
-        return loan.is_overdue
+        return f"{loan.days_overdue()} d late" if loan.is_overdue else None
 
 
 class BookLoanHistoryInline(ReadOnlyLoanInline):
@@ -204,7 +218,7 @@ class MemberLoanInline(ReadOnlyLoanInline):
         return super().get_queryset(request).select_related("book").order_by("status", "due_date")
 
 
-class LendBookInline(admin.TabularInline):
+class LendBookInline(TabularInline):
     """Inline editing on the member page: lend books to this member without
     leaving it. Rows are only ever added; saving goes through checkout_book."""
 
@@ -214,11 +228,16 @@ class LendBookInline(admin.TabularInline):
     autocomplete_fields = ["book"]
     extra = 1
     can_delete = False
-    verbose_name = "new loan"
+    verbose_name = "loan"
     verbose_name_plural = "Lend a book"
 
     def get_queryset(self, request):
         return super().get_queryset(request).none()
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        if db_field.name == "notes":  # one line in a table row, not a big text box
+            kwargs["widget"] = UnfoldAdminTextInputWidget(attrs={"placeholder": "Optional"})
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
 
     def has_change_permission(self, request, obj=None):
         return False
@@ -231,14 +250,11 @@ class LendBookInline(admin.TabularInline):
 
 
 @admin.register(Author)
-class AuthorAdmin(admin.ModelAdmin):
+class AuthorAdmin(LibraryModelAdmin):
     list_display = ["name", "born_year", "book_count"]
     search_fields = ["name"]
     list_per_page = 50
     ordering = ["name"]
-
-    class Media:
-        css = ADMIN_CSS
 
     def get_queryset(self, request):
         return super().get_queryset(request).annotate(annotated_books=Count("books"))
@@ -252,7 +268,7 @@ class AuthorAdmin(admin.ModelAdmin):
 
 
 @admin.register(Book)
-class BookAdmin(admin.ModelAdmin):
+class BookAdmin(LibraryModelAdmin):
     list_display_links = ["title"]
     list_filter = ["genre", AvailabilityFilter, PublishedPeriodFilter, "is_withdrawn"]
     search_fields = ["title", "isbn", "authors__name"]
@@ -269,9 +285,6 @@ class BookAdmin(admin.ModelAdmin):
         ("Record", {"fields": ["created_at"], "classes": ["collapse"]}),
     ]
 
-    class Media:
-        css = ADMIN_CSS
-
     def get_queryset(self, request):
         return super().get_queryset(request).with_availability().prefetch_related("authors")
 
@@ -280,7 +293,7 @@ class BookAdmin(admin.ModelAdmin):
         # need the stock and record columns.
         columns = ["cover_thumb", "title", "author_names", "genre", "available"]
         if can_manage_catalogue(request):
-            columns += ["copies_total", "isbn", "is_withdrawn", "created_at"]
+            columns += ["copies_total", "isbn", "withdrawn_label", "created_at"]
         return columns
 
     @admin.display(description="cover")
@@ -296,6 +309,11 @@ class BookAdmin(admin.ModelAdmin):
         if not book.cover_image:
             return "No cover uploaded."
         return format_html('<img src="{}" class="cover-preview" alt="">', book.cover_image.url)
+
+    @display(description="circulation", ordering="is_withdrawn", label="warning")
+    def withdrawn_label(self, book):
+        # Only flag the exception; a red cross on every normal book reads as an error.
+        return "Withdrawn" if book.is_withdrawn else None
 
     @admin.display(description="authors")
     def author_names(self, book):
@@ -330,7 +348,7 @@ class BookAdmin(admin.ModelAdmin):
 
 
 @admin.register(Member)
-class MemberAdmin(admin.ModelAdmin):
+class MemberAdmin(LibraryModelAdmin):
     list_display = [
         "full_name",
         "email",
@@ -345,9 +363,6 @@ class MemberAdmin(admin.ModelAdmin):
     readonly_fields = ["open_loans_link"]
     actions = ["suspend_members", "reactivate_members"]
     inlines = [LendBookInline, MemberLoanInline]
-
-    class Media:
-        css = ADMIN_CSS
 
     def get_queryset(self, request):
         return super().get_queryset(request).with_loan_counts()
@@ -365,28 +380,29 @@ class MemberAdmin(admin.ModelAdmin):
     def has_change_status_permission(self, request):
         return can_change_member_status(request)
 
-    @admin.display(description="status", ordering="status")
+    @display(
+        description="status",
+        ordering="status",
+        label={Member.Status.ACTIVE.label: "success", Member.Status.SUSPENDED.label: "danger"},
+    )
     def status_badge(self, member):
-        css = "badge--ok" if member.status == Member.Status.ACTIVE else "badge--bad"
-        return format_html('<span class="badge {}">{}</span>', css, member.get_status_display())
+        return member.get_status_display()
 
     @admin.display(description="open loans", ordering="annotated_active_loans")
     def active_loans(self, member):
         return member.active_loan_count
 
-    @admin.display(description="overdue", ordering="annotated_overdue_loans")
+    @display(description="overdue", ordering="annotated_overdue_loans", label="danger")
     def overdue_badge(self, member):
         if not member.overdue_loan_count:
-            return "-"
-        return format_html(
-            '<span class="badge badge--bad">{} overdue</span>', member.overdue_loan_count
-        )
+            return None
+        return f"{member.overdue_loan_count} overdue"
 
     @admin.display(description="return or extend")
     def open_loans_link(self, member):
         url = reverse("admin:library_loan_changelist")
         return format_html(
-            '<a href="{}?member__id__exact={}&status__exact=active">'
+            '<a class="lib-link" href="{}?member__id__exact={}&status__exact=active">'
             "Open this member's {} active loan(s) to return or extend them</a>",
             url,
             member.pk,
@@ -433,14 +449,14 @@ class MemberAdmin(admin.ModelAdmin):
 
 
 @admin.register(Loan)
-class LoanAdmin(admin.ModelAdmin):
+class LoanAdmin(LibraryModelAdmin):
     form = CheckoutForm
     list_display = [
         "book",
         "member",
         "loaned_on",
         "due_date",
-        "status",
+        "status_label",
         "overdue",
         "late_fee_display",
         "extended",
@@ -453,9 +469,6 @@ class LoanAdmin(admin.ModelAdmin):
     list_per_page = 100
     show_full_result_count = False  # skip a second COUNT(*) on a large table
     actions = ["mark_returned", "extend_seven_days"]
-
-    class Media:
-        css = ADMIN_CSS
 
     def get_fields(self, request, obj=None):
         if obj is None:
@@ -490,6 +503,14 @@ class LoanAdmin(admin.ModelAdmin):
     @admin.display(boolean=True, description="overdue")
     def overdue(self, loan):
         return loan.is_overdue
+
+    @display(
+        description="status",
+        ordering="status",
+        label={Loan.Status.ACTIVE.label: "info", Loan.Status.RETURNED.label: "success"},
+    )
+    def status_label(self, loan):
+        return loan.get_status_display()
 
     @admin.display(description="late fee")
     def late_fee_display(self, loan):
@@ -531,16 +552,37 @@ class LoanAdmin(admin.ModelAdmin):
 
 
 admin.site.unregister(User)
+admin.site.unregister(Group)
 
 
 @admin.register(User)
-class StaffUserAdmin(UserAdmin):
+class StaffUserAdmin(BaseUserAdmin, ModelAdmin):
     """Members of the Admin group manage staff accounts, but only a superuser
     can hand out superuser status or per-user permissions. Otherwise an Admin
     could grant themselves anything."""
+
+    form = UserChangeForm
+    add_form = UserCreationForm
+    change_password_form = AdminPasswordChangeForm
 
     def get_readonly_fields(self, request, obj=None):
         readonly = list(super().get_readonly_fields(request, obj))
         if not request.user.is_superuser:
             readonly += ["is_superuser", "user_permissions", "last_login", "date_joined"]
         return readonly
+
+
+@admin.register(Group)
+class RoleAdmin(BaseGroupAdmin, ModelAdmin):
+    pass
+
+
+# The lockout log from django-axes, re-registered so it uses the same theme.
+for model, base in [
+    (AccessAttempt, AccessAttemptAdmin),
+    (AccessFailureLog, AccessFailureLogAdmin),
+    (AccessLog, AccessLogAdmin),
+]:
+    if admin.site.is_registered(model):  # only the ones axes itself shows
+        admin.site.unregister(model)
+        admin.site.register(model, type(f"Themed{base.__name__}", (base, ModelAdmin), {}))

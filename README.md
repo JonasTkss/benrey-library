@@ -13,10 +13,13 @@ loans, two staff roles, covers in object storage, and an AI help widget that exp
 
 | Role | Sees |
 | --- | --- |
-| **Admin** (`admin_demo`) | Everything in the library, plus Users, Groups and the login-lockout log. Can add/edit/delete books and authors, suspend members, withdraw books. |
-| **Librarian** (`librarian_demo`) | Only Authors, Books, Loans, Members. Books and authors are read-only ("Select book to *view*", no Add button). Fewer book columns. Can lend, return and extend loans and register members. No delete anywhere, cannot suspend members. |
+| **Admin** (`admin_demo`) | Everything in the library, plus an *Administration* menu (staff accounts, roles, login attempts) and catalogue/security tiles on the dashboard. Can add/edit/delete books and authors, suspend members, withdraw books. |
+| **Librarian** (`librarian_demo`) | A smaller sidebar (no Administration section), a circulation-only dashboard, read-only books and authors (no Add button), fewer book columns. Can lend, return and extend loans and register members. No delete anywhere, cannot suspend members. |
 
 A short tour:
+0. The **Dashboard** (first page after login): loans out, overdue, due soon, members and
+   copies on the shelf, a 14-day lending chart, and the overdue/due-soon lists. **How to use**
+   in the sidebar is a short staff guide that only shows the tasks your role can do.
 1. **Members** → filter "Has overdue loans" → open a member: lend a book from the
    **Lend a book** inline, see their loans (open first), follow the link to their open loans.
 2. **Loans** → filter "Due: Overdue" → select some → **Mark selected loans as returned**. The
@@ -40,11 +43,14 @@ Browser ──HTTPS──▶ Railway (gunicorn + WhiteNoise, Django 5.2)
 
 - `library/`: the domain. `models.py` (schema, constraints, computed values),
   `services.py` (checkout / return / extend with row locks), `admin.py` (all staff UI),
+  `dashboard.py` (sidebar menu, dashboard numbers, guide page),
   `validators.py` (ISBN, cover uploads), `management/commands/seed_demo.py`.
 - `assistant/`: the help widget. `context.py` (grounding from model metadata),
   `client.py` (OpenRouter + fallback), `views.py` (endpoint, validation, rate limit,
   non-AI fallback), `static/assistant/` (widget JS/CSS).
-- `config/`: settings split into `base` / `dev` / `test` / `prod`, URLs, `/healthz`.
+- `config/`: settings split into `base` / `dev` / `test` / `prod`, URLs, `/healthz`,
+  `client_ip.py` (which IP the login lockout counts).
+- `templates/admin/`: the dashboard (`index.html`), the guide (`guide.html`) and the widget hook.
 - `docs/DEFENSE_NOTES.md`: why each piece is built the way it is, phase by phase.
 
 ## Why this stack
@@ -52,6 +58,7 @@ Browser ──HTTPS──▶ Railway (gunicorn + WhiteNoise, Django 5.2)
 | Concern | Choice | Why, and what I didn't pick |
 | --- | --- | --- |
 | Framework | **Python 3.12 + Django 5.2 LTS** | The brief grades a *generated* admin. Django's admin is the most complete one I know: list filters, search, inlines, actions, autocomplete and per-model permissions that the admin itself enforces. Roles become data instead of `if role ==` checks. Rails + ActiveAdmin is similar, but I am faster in Python. Headless CMSs (Strapi, Payload) are more moving parts and have weaker per-action permissions. 5.2 is the LTS line. |
+| Admin theme | **django-unfold** | A modern skin and sidebar on top of the *same* Django admin: every list, filter, inline, action and permission check is still the framework's. A hand-built dashboard would have thrown that away. Jazzmin was the alternative; it is Bootstrap 4 based and uses inline scripts, which the CSP forbids. |
 | Database | **Supabase Postgres** | Real managed Postgres with a free tier. The model leans on Postgres features: partial unique constraints, check constraints, `SELECT ... FOR UPDATE`. Using the same provider for storage means one less account and dashboard. |
 | Object storage | **Supabase Storage via its S3 API** (`django-storages`) | Standard S3 protocol, so the provider can be swapped through env vars (R2, B2, AWS). Private bucket, signed URLs. |
 | Hosting | **Railway** | Deploys from GitHub, HTTPS by default, a pre-deploy migrate step and a health check gate. Render was the alternative; Railway's pre-deploy command and health-checked deploys made it simpler. |
@@ -97,10 +104,15 @@ checks; nothing is just hidden with CSS.
   come from env vars only.
 - Sessions: DB-backed, 8 hours, `HttpOnly`, `Secure`, `SameSite=Lax`, rotated at login,
   deleted at logout. A leaked session can be revoked by deleting its row.
-- Brute force: django-axes locks a username+IP pair for 15 minutes after 5 failures.
+- Brute force: django-axes locks a username+IP pair for 15 minutes after 5 failures. Behind
+  Railway the visitor's IP is read from the edge's `X-Real-IP` header (validated, and only
+  trusted in production), otherwise every visitor would share the proxy's address.
 - CSRF on every POST, including the assistant (`X-CSRFToken`); no `csrf_exempt` anywhere.
 - HTTPS redirect, HSTS (1 year, no preload), `X-Frame-Options: DENY`, nosniff,
-  `Referrer-Policy`, and a CSP without inline scripts (`script-src 'self'`).
+  `Referrer-Policy`, and a CSP without inline scripts (`script-src 'self' 'unsafe-eval'`).
+  `'unsafe-eval'` is the price of the Unfold theme, whose Alpine.js evaluates its `x-data`
+  attributes; scripts still only load from our own origin, and Django escapes all output, so an
+  attacker has no way to inject such attributes.
 - Uploads: allow-listed extensions, 2 MB, content verified with Pillow, max 4000px, no SVG,
   random UUID filenames, stored only in the bucket.
 - Config fails fast: production will not start without a strong `SECRET_KEY`, `ALLOWED_HOSTS`,

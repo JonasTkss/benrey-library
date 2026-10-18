@@ -54,6 +54,16 @@ def test_session_cookie_settings(settings):
     assert settings.SESSION_ENGINE == "django.contrib.sessions.backends.db"
 
 
+def test_login_without_next_lands_on_dashboard(client, staff):
+    response = client.post(
+        reverse("admin:login"),
+        {"username": "desk", "password": PASSWORD},
+        REMOTE_ADDR="203.0.113.9",
+    )
+    assert response.status_code == 302
+    assert response["Location"] == reverse("admin:index")
+
+
 def failed_login(client, real_ip):
     return client.post(
         reverse("admin:login"),
