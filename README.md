@@ -3,9 +3,18 @@
 A small book lending library run entirely from a customized Django admin: catalogue, members,
 loans, two staff roles, covers in object storage, and an AI help widget that explains the forms.
 
-- **Live:** https://web-production-fb1ad.up.railway.app (the home page redirects to the admin login)
-- **Access:** demo accounts for both roles (`admin_demo`, `librarian_demo`) are sent by email,
-  not stored in this repo. To run your own copy, see [Quick start](#quick-start).
+- **Live:** https://web-production-fb1ad.up.railway.app (the home page redirects to the login page,
+  https://web-production-fb1ad.up.railway.app/staff-704015/)
+- **Demo logins** (one per role, so you can compare them side by side in two browsers):
+
+  | Role | Username | Password |
+  | --- | --- | --- |
+  | Admin | `admin_demo` | `29TujUUFIvJUolsl9ryg` |
+  | Librarian | `librarian_demo` | `kioypAqfb-2FmqBnhOW-` |
+
+  These are demo accounts on demo data, published here on purpose so reviewers can log in.
+  Five wrong passwords lock that username for 15 minutes from your IP. To run your own copy,
+  see [Quick start](#quick-start).
 
 ---
 
@@ -18,53 +27,59 @@ loans, two staff roles, covers in object storage, and an AI help widget that exp
 
 A short tour:
 0. The **Dashboard** (first page after login): loans out, overdue, due soon, members and
-   copies on the shelf, a 14-day lending chart, and the overdue/due-soon lists. **How to use**
-   in the sidebar is a short staff guide that only shows the tasks your role can do.
-1. **Members** → filter "Has overdue loans" → open a member: lend a book from the
-   **Lend a book** inline, see their loans (open first), follow the link to their open loans.
+   copies on the shelf, a 14-day lending chart, the overdue/due-soon lists and one-click Ask AI
+   questions. **How to use** in the sidebar is a short staff guide that only shows the tasks
+   your role can do, including a clickable Ask AI tutorial.
+1. **Members** → filter "Has overdue loans" (or sort by **Fees due**) → open a member: card
+   number, fees due, lend a book from the **Lend a book** inline, see their loans (open first),
+   follow the link to their open loans. As Admin, **Suspend member** is at the top of the page.
 2. **Loans** → filter "Due: Overdue" → select some → **Mark selected loans as returned**. The
    result message says how many were returned and lists any that were skipped and why.
 3. **Books** → availability badges, filters (genre, availability, publication period), search by
    title / ISBN / author, loan history inline on each book.
 4. Click **Ask AI** (bottom right) on any page and ask, for example, "how long can I extend
-   the due date?"
+   the due date?", "who has the highest bill?" or "give me some library statistics", then a
+   follow-up like "what about overdue loans?".
 5. Log in as the librarian and try `/<admin>/library/book/add/` or a delete URL: both return 403.
 
 ## Architecture
 
 ```
-Browser ──HTTPS──▶ Railway (gunicorn + WhiteNoise, Django 5.2)
+Browser ──HTTPS──▶ Railway (gunicorn + WhiteNoise, Django 6.1)
                      │            │                    │
                      ▼            ▼                    ▼
          Supabase Postgres   Supabase Storage     OpenRouter
-         (data, sessions,    (S3 API, private     (free models,
-          cache, rate limit)  bucket, signed URLs) fallback chain)
+         (data, sessions,    (S3 API, private     (gpt-4.1-mini,
+          cache, rate limit)  bucket; covers are   free models as
+                              streamed via /covers) fallback)
 ```
 
 - `library/`: the domain. `models.py` (schema, constraints, computed values),
   `services.py` (checkout / return / extend with row locks), `admin.py` (all staff UI),
-  `dashboard.py` (sidebar menu, dashboard numbers, guide page),
+  `dashboard.py` (sidebar menu, dashboard numbers, guide page), `views.py` (cover images),
   `validators.py` (ISBN, cover uploads), `management/commands/seed_demo.py`.
 - `assistant/`: the help widget. `context.py` (grounding from model metadata),
-  `lookups.py` (allow-listed read-only data queries the model can request),
+  `lookups.py` (allow-listed read-only data queries the model can request), `stats.py`
+  (the statistics behind them),
   `client.py` (OpenRouter + fallback), `views.py` (endpoint, validation, rate limit,
   non-AI fallback), `static/assistant/` (widget JS/CSS).
 - `config/`: settings split into `base` / `dev` / `test` / `prod`, URLs, `/healthz`,
-  `client_ip.py` (which IP the login lockout counts).
+  `client_ip.py` (which IP the login lockout counts), `ratelimit.py` (per-IP limits, headers).
 - `templates/admin/`: the dashboard (`index.html`), the guide (`guide.html`) and the widget hook.
 - `docs/DEFENSE_NOTES.md`: why each piece is built the way it is, phase by phase.
+- `docs/SECURITY_AUDIT.md`: endpoint inventory, abuse controls, scan results, findings.
 
 ## Why this stack
 
 | Concern | Choice | Why, and what I didn't pick |
 | --- | --- | --- |
-| Framework | **Python 3.12 + Django 5.2 LTS** | The brief grades a *generated* admin. Django's admin is the most complete one I know: list filters, search, inlines, actions, autocomplete and per-model permissions that the admin itself enforces. Roles become data instead of `if role ==` checks. Rails + ActiveAdmin is similar, but I am faster in Python. Headless CMSs (Strapi, Payload) are more moving parts and have weaker per-action permissions. 5.2 is the LTS line. |
+| Framework | **Python 3.12 + Django 6.1** | The brief grades a *generated* admin. Django's admin is the most complete one I know: list filters, search, inlines, actions, autocomplete and per-model permissions that the admin itself enforces. Roles become data instead of `if role ==` checks. Rails + ActiveAdmin is similar, but I am faster in Python. Headless CMSs (Strapi, Payload) are more moving parts and have weaker per-action permissions. Started on 5.2 LTS; Dependabot's upgrade to 6.1 passed the full test suite unchanged. |
 | Admin theme | **django-unfold** | A modern skin and sidebar on top of the *same* Django admin: every list, filter, inline, action and permission check is still the framework's. A hand-built dashboard would have thrown that away. Jazzmin was the alternative; it is Bootstrap 4 based and uses inline scripts, which the CSP forbids. |
 | Database | **Supabase Postgres** | Real managed Postgres with a free tier. The model leans on Postgres features: partial unique constraints, check constraints, `SELECT ... FOR UPDATE`. Using the same provider for storage means one less account and dashboard. |
-| Object storage | **Supabase Storage via its S3 API** (`django-storages`) | Standard S3 protocol, so the provider can be swapped through env vars (R2, B2, AWS). Private bucket, signed URLs. |
+| Object storage | **Supabase Storage via its S3 API** (`django-storages`) | Standard S3 protocol, so the provider can be swapped through env vars (R2, B2, AWS). Private bucket; the app streams covers to the browser, so the bucket is never exposed. |
 | Hosting | **Railway** | Deploys from GitHub, HTTPS by default, a pre-deploy migrate step and a health check gate. Render was the alternative; Railway's pre-deploy command and health-checked deploys made it simpler. |
 | Auth | Django auth, **Argon2**, DB sessions, **django-axes** | Framework auth is audited; Argon2 is memory-hard (more resistant to GPU cracking than the PBKDF2 default). DB sessions can be revoked server-side. Axes adds lockout. |
-| AI | **OpenRouter** with a chain of `:free` models | One OpenAI-compatible API, many models, free tier. A free model being rate-limited is normal, so falling through to the next model is designed in. |
+| AI | **OpenRouter**: `gpt-4.1-mini`, then `:free` models | One OpenAI-compatible API, many models. A cheap paid model first (about $0.001 per question) for speed and reliability; free models behind it, so a rate limit or an empty key balance only costs speed. |
 | Tests | pytest, pytest-django, factory_boy, time-machine | Short, readable tests; time-machine freezes "today" for overdue/fee tests. |
 
 ## Data model and business rules
@@ -108,8 +123,8 @@ Full audit, endpoint inventory and findings: [docs/SECURITY_AUDIT.md](docs/SECUR
 A test walks every URL as an anonymous visitor and as a staff account without a role, so no
 endpoint can hand out data by accident.
 
-- Passwords: Argon2, validators (min 12 chars, common, numeric, similarity). Demo passwords
-  come from env vars only.
+- Passwords: Argon2, validators (min 12 chars, common, numeric, similarity). The seed command
+  takes demo passwords from env vars; the two demo logins above are published on purpose.
 - Sessions: DB-backed, 8 hours, `HttpOnly`, `Secure`, `SameSite=Lax`, rotated at login,
   deleted at logout. A leaked session can be revoked by deleting its row.
 - Brute force: django-axes locks a username+IP pair for 15 minutes after 5 failures. Behind
@@ -201,7 +216,7 @@ python manage.py runserver                # http://localhost:8000/admin/
 Tests and checks:
 
 ```bash
-pytest --cov          # ~150 tests, needs DATABASE_URL (Postgres for the locking test)
+pytest --cov          # ~290 tests, needs DATABASE_URL (Postgres for the locking test)
 make lint             # ruff check + format check
 make check            # system checks + "no missing migrations"
 ```
@@ -266,7 +281,7 @@ to stdout). `/healthz` tells you whether the app can reach the database (503 if 
 
 - Free tiers: cold starts on the first request, and free AI models can be slow or rate limited
   (the fallback covers it).
-- Signed cover URLs expire after an hour, so a page left open overnight shows broken thumbnails
-  until it is refreshed.
+- The demo logins are public, so anyone can change demo data. `seed_demo --reset
+  --allow-production` restores it in about a minute.
 - The demo `admin_demo` account is in the Admin group, not a superuser, so it cannot grant
   superuser rights. That is intended.

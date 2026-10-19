@@ -109,3 +109,7 @@ Fixed earlier: the lockout counted Railway's proxy address instead of the visito
 - Access logs contain request paths, including admin search terms.
 - The admin path is not secret on the demo (the home page redirects to it); that is obscurity
   anyway, not a control.
+- **The two demo logins are published in the README** so reviewers can log in without an
+  email round-trip (owner's decision). They protect only demo data. `admin_demo` is not a
+  superuser, so it cannot grant itself more rights, and the lockout and rate limits still apply.
+  Anyone could change the demo data, and `seed_demo --reset --allow-production` restores it.
