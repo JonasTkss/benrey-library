@@ -109,11 +109,3 @@ Fixed earlier: the lockout counted Railway's proxy address instead of the visito
 - Access logs contain request paths, including admin search terms.
 - The admin path is not secret on the demo (the home page redirects to it); that is obscurity
   anyway, not a control.
-
-**Action needed (account owner, outside the code)**
-
-1. **Rotate the credentials that were pasted into a chat during setup:** Supabase S3 access key,
-   OpenRouter API key and the database password. Then update the Railway variables.
-2. Use a **dedicated, least-privileged database role** for the app instead of `postgres`.
-3. Turn on **2FA** for GitHub, Railway, Supabase and OpenRouter.
-4. Keep the OpenRouter key's spending cap (currently $5).
